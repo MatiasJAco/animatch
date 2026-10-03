@@ -1,0 +1,25 @@
+{
+  "name": "animatch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "node scripts/migrate.ts"
+  },
+  "dependencies": {
+    "nuxt": "^3.0.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.3"
+  }
+}

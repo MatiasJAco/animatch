@@ -1,0 +1,527 @@
+openapi: 3.1.0
+info:
+  title: Animatch Daily Puzzle API
+  version: "1.0.0"
+  description: |
+    Server routes for the daily anime puzzle games. One puzzle per game per UTC day.
+
+    Contract rules that hold for every endpoint:
+      - The date in every response is a civil UTC date (YYYY-MM-DD). The day rolls over at 00:00 UTC.
+      - No response ever contains the stored solution for a puzzle. Answers are disclosed only
+        through attempt responses.
+      - Catalog ids are opaque integers. No catalog field outside the eight allowed facts is exposed,
+        and no image URL is ever returned or fetched.
+      - Errors always use the same envelope: a machine code the client localizes, plus a short
+        non-technical English fallback. The server never decides the visitor's language.
+      - The API is language-neutral. No response depends on the visitor's language, because the
+        browser chooses Spanish or English locally and renders its own copy from the code.
+      - No response carries an attempt count. The server holds no game state and cannot know how
+        many answers the visitor has given, so the client counts them: the count is every answer
+        given, correct or wrong, excluding attempts rejected as invalid.
+
+servers:
+  - url: /api
+    description: Same origin as the site. No cross-origin access is required or configured.
+
+paths:
+  /daily:
+    get:
+      operationId: listDaily
+      summary: List today's three puzzles and their availability
+      description: |
+        Returns one entry per game for the current UTC day. Availability is per game, so a game
+        that cannot be generated today (for example Match the Series when the current season has no
+        catalog coverage) does not prevent the other two from loading.
+      responses:
+        "200":
+          description: Today's games with their status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyListing"
+              examples:
+                allReady:
+                  summary: Every game playable
+                  value:
+                    date: "2026-10-02"
+                    games:
+                      - { game: more_or_less, status: ready }
+                      - { game: match_the_series, status: ready }
+                      - { game: groups, status: ready }
+                oneUnavailable:
+                  summary: Current season has no catalog coverage
+                  value:
+                    date: "2026-10-02"
+                    games:
+                      - { game: more_or_less, status: ready }
+                      - { game: match_the_series, status: unavailable }
+                      - { game: groups, status: ready }
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+
+  /daily/{game}:
+    get:
+      operationId: getDailyPuzzle
+      summary: Today's puzzle for one game, without the solution
+      description: |
+        Creates the day's puzzle on first request, inside one transaction, then returns the stored
+        puzzle. The response is the persisted row, so every visitor on the same UTC day receives
+        identical puzzle content even when two requests race.
+      parameters:
+        - $ref: "#/components/parameters/Game"
+      responses:
+        "200":
+          description: The day's puzzle, solution withheld.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/MoreOrLessPuzzle"
+                  - $ref: "#/components/schemas/MatchTheSeriesPuzzle"
+                  - $ref: "#/components/schemas/GroupsPuzzle"
+              examples:
+                moreOrLess:
+                  summary: More or Less, chain of 11 with one visible count
+                  value:
+                    game: more_or_less
+                    date: "2026-10-02"
+                    rounds: 10
+                    chain:
+                      - { id: 412, name: "Person A" }
+                      - { id: 88, name: "Person B" }
+                    initialVisible: { id: 77, name: "Person C", roleCount: 143 }
+                matchTheSeries:
+                  summary: Match the Series, names plus placeholder area
+                  value:
+                    game: match_the_series
+                    date: "2026-10-02"
+                    season: { season: fall, year: 2026 }
+                    tiles:
+                      - { key: "c:12345", kind: character, name: "Character A" }
+                      - { key: "p:678", kind: person, name: "Person D" }
+                    series:
+                      - { key: "a:9001", title: "Series One" }
+                    wrongLimit: 3
+                groups:
+                  summary: Groups, 16 tiles with no criterion data
+                  value:
+                    game: groups
+                    date: "2026-10-02"
+                    tiles:
+                      - { key: "c:12345@a:9001", kind: character, name: "Character A" }
+                    groupCount: 4
+                    wrongLimit: 5
+        "404":
+          $ref: "#/components/responses/UnknownGame"
+        "503":
+          description: The puzzle could not be produced or the catalog is unreachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                unavailable:
+                  value: { error: { code: PUZZLE_UNAVAILABLE, message: No puzzle available for today. } }
+                database:
+                  value: { error: { code: DATABASE_UNAVAILABLE, message: The puzzle could not be loaded. } }
+
+  /daily/{game}/attempt:
+    post:
+      operationId: submitAttempt
+      summary: Validate one attempt and reveal the answer or a hint
+      description: |
+        Stateless by design. The server holds no game state and creates no session: the attempt is
+        validated against the stored puzzle alone. This is also the only path by which a hidden role
+        count, a correct pairing, or a group criterion is ever disclosed.
+      parameters:
+        - $ref: "#/components/parameters/Game"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/MoreOrLessAttempt"
+                - $ref: "#/components/schemas/MatchTheSeriesAttempt"
+                - $ref: "#/components/schemas/GroupsAttempt"
+            examples:
+              moreOrLess:
+                summary: More or Less, answer for round 0
+                value: { round: 0, answer: more }
+              matchTheSeries:
+                summary: Match the Series, one pairing
+                value: { tileKey: "c:12345", seriesKey: "a:9001" }
+              groups:
+                summary: Groups, four tiles proposed as a group
+                value:
+                  tileKeys: ["c:1@a:9", "c:2@a:9", "c:3@a:9", "c:4@a:9"]
+      responses:
+        "200":
+          description: The attempt was understood; the outcome follows.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/MoreOrLessOutcome"
+                  - $ref: "#/components/schemas/MatchTheSeriesOutcome"
+                  - $ref: "#/components/schemas/GroupsOutcome"
+              examples:
+                moreOrLessHit:
+                  summary: Correct, hidden count revealed
+                  value:
+                    result: hit
+                    round: 0
+                    correct: more
+                    given: more
+                    counts: { hidden: 96, visible: 143 }
+                    state: in_progress
+                moreOrLessMiss:
+                  summary: Wrong, game over, counts revealed
+                  value:
+                    result: miss
+                    round: 0
+                    correct: less
+                    given: more
+                    counts: { hidden: 96, visible: 143 }
+                    state: lost
+                matchTheSeriesHit:
+                  value: { result: hit, tileKey: "c:12345", seriesKey: "a:9001", state: in_progress }
+                matchTheSeriesMissInPlay:
+                  summary: Wrong pair below the limit, nothing revealed
+                  description: |
+                    No correctSeriesKey is present, and no other pairing is disclosed. The client
+                    returns both tiles to an unselected state.
+                  value: { result: miss, tileKey: "c:12345", seriesKey: "a:9102", state: in_progress }
+                matchTheSeriesGameOver:
+                  summary: Wrong pair that ends the game, pairings revealed
+                  value:
+                    result: miss
+                    tileKey: "c:12345"
+                    seriesKey: "a:9102"
+                    correctSeriesKey: "a:9001"
+                    remainingWrong: 0
+                    state: lost
+                groupsHit:
+                  summary: Correct group, criterion disclosed
+                  value:
+                    result: hit
+                    tileKeys: ["c:1@a:9", "c:2@a:9", "c:3@a:9", "c:4@a:9"]
+                    criterion: { type: same_anime, animeId: 9 }
+                    remainingGroups: 3
+                    state: in_progress
+                groupsMiss:
+                  summary: Wrong group, overlap hint only
+                  description: |
+                    overlap is the largest number of submitted tiles sharing one hidden group. It is
+                    a hint: it discloses no group and no shared fact, and it does not count toward
+                    the mistake limit beyond this attempt being a mistake.
+                  value:
+                    result: miss
+                    tileKeys: ["c:1@a:9", "c:2@a:9", "c:9@a:1", "c:8@a:2"]
+                    overlap: 2
+                    remainingGroups: 4
+                    state: in_progress
+        "400":
+          description: |
+            The attempt was rejected. An id or key that is not part of the stored puzzle, a
+            malformed body, an out-of-range round, or an already-consumed tile key all land here,
+            and none of them change game state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                unknownEntity:
+                  value: { error: { code: INVALID_ATTEMPT, message: That is not part of today's puzzle. } }
+                badRound:
+                  value: { error: { code: INVALID_ATTEMPT, message: That round does not exist. } }
+        "404":
+          $ref: "#/components/responses/UnknownGame"
+        "503":
+          description: The catalog is unreachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                database:
+                  value: { error: { code: DATABASE_UNAVAILABLE, message: The puzzle could not be loaded. } }
+
+components:
+  parameters:
+    Game:
+      name: game
+      in: path
+      required: true
+      description: Game identifier.
+      schema:
+        type: string
+        enum: [more_or_less, match_the_series, groups]
+
+  responses:
+    UnknownGame:
+      description: The game identifier is not one of the three v1 games.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            unknown:
+              value: { error: { code: UNKNOWN_GAME, message: That game does not exist. } }
+    DatabaseUnavailable:
+      description: |
+        The catalog could not be reached. The site must render a bilingual error state with a retry
+        action; a blank page is a defect.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            database:
+              value: { error: { code: DATABASE_UNAVAILABLE, message: The puzzle could not be loaded. } }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - UNKNOWN_GAME
+                - INVALID_ATTEMPT
+                - PUZZLE_UNAVAILABLE
+                - DATABASE_UNAVAILABLE
+              description: |
+                Stable code. The client renders its own localized copy from its message catalog keyed
+                by this value, in Spanish or English.
+            message:
+              type: string
+              description: |
+                Short non-technical English fallback. Never contains a connection string, a query, a
+                host name, or a stack trace.
+
+    DailyListing:
+      type: object
+      required: [date, games]
+      properties:
+        date:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: Civil date in UTC.
+        games:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: object
+            required: [game, status]
+            properties:
+              game:
+                type: string
+                enum: [more_or_less, match_the_series, groups]
+              status:
+                type: string
+                enum: [ready, unavailable, error]
+                description: |
+                  ready - a puzzle exists for today. unavailable - no valid puzzle can be produced
+                  today, for example when the current calendar season has no catalog coverage.
+                  error - the catalog could not be reached.
+
+    PersonTile:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+
+    MoreOrLessPuzzle:
+      type: object
+      required: [game, date, rounds, chain, initialVisible]
+      properties:
+        game: { type: string, enum: [more_or_less] }
+        date: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        rounds:
+          type: integer
+          const: 10
+          description: Ten rounds, eleven people in the chain.
+        chain:
+          type: array
+          minItems: 11
+          maxItems: 11
+          description: |
+            Puzzle order. Round i compares chain[i] (hidden, on the left) against chain[i-1]
+            (visible, on the right), where chain[-1] is initialVisible.
+          items: { $ref: "#/components/schemas/PersonTile" }
+        initialVisible:
+          allOf:
+            - $ref: "#/components/schemas/PersonTile"
+            - type: object
+              required: [roleCount]
+              properties:
+                roleCount:
+                  type: integer
+                  description: Count of voice role records for this person. Only this count is served.
+
+    MatchTheSeriesPuzzle:
+      type: object
+      required: [game, date, season, tiles, series, wrongLimit]
+      properties:
+        game: { type: string, enum: [match_the_series] }
+        date: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        season:
+          type: object
+          required: [season, year]
+          properties:
+            season:
+              type: string
+              enum: [winter, spring, summer, fall]
+            year: { type: integer }
+          description: Calendar season at play time in UTC. Never an older season.
+        tiles:
+          type: array
+          minItems: 16
+          maxItems: 16
+          description: |
+            Left grid, rendered as a name plus a neutral in-project placeholder. Carries no image
+            URL and no anime id, since the anime id is the answer.
+          items:
+            type: object
+            required: [key, kind, name]
+            properties:
+              key: { type: string, description: "Kind-prefixed so a character and a person cannot collide." }
+              kind: { type: string, enum: [character, person] }
+              name: { type: string }
+        series:
+          type: array
+          minItems: 16
+          maxItems: 16
+          description: Right grid, ordered independently of the left grid.
+          items:
+            type: object
+            required: [key, title]
+            properties:
+              key: { type: string }
+              title: { type: string }
+        wrongLimit: { type: integer, const: 3 }
+
+    GroupsPuzzle:
+      type: object
+      required: [game, date, tiles, groupCount, wrongLimit]
+      properties:
+        game: { type: string, enum: [groups] }
+        date: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        tiles:
+          type: array
+          minItems: 16
+          maxItems: 16
+          description: |
+            Board tiles in shuffled order. Carries no criterion data: anime id, language, and voice
+            actor linkage are the answer and live only in the stored solution.
+          items:
+            type: object
+            required: [key, kind, name]
+            properties:
+              key: { type: string }
+              kind: { type: string, enum: [character, person] }
+              name: { type: string }
+        groupCount: { type: integer, const: 4 }
+        wrongLimit: { type: integer, const: 5 }
+
+    MoreOrLessAttempt:
+      type: object
+      required: [round, answer]
+      properties:
+        round: { type: integer, minimum: 0, maximum: 9 }
+        answer: { type: string, enum: [more, less] }
+
+    MatchTheSeriesAttempt:
+      type: object
+      required: [tileKey, seriesKey]
+      properties:
+        tileKey: { type: string }
+        seriesKey: { type: string }
+
+    GroupsAttempt:
+      type: object
+      required: [tileKeys]
+      properties:
+        tileKeys:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items: { type: string }
+
+    MoreOrLessOutcome:
+      type: object
+      required: [result, round, correct, given, counts, state]
+      properties:
+        result: { type: string, enum: [hit, miss] }
+        round: { type: integer }
+        correct: { type: string, enum: [more, less] }
+        given: { type: string, enum: [more, less] }
+        counts:
+          type: object
+          required: [hidden, visible]
+          properties:
+            hidden: { type: integer }
+            visible: { type: integer }
+          description: Disclosed on both hit and miss. This is the only disclosure path.
+        state:
+          type: string
+          enum: [in_progress, won, lost]
+          description: Advisory for the client's own progress tracking; the server holds no state.
+
+    MatchTheSeriesOutcome:
+      type: object
+      required: [result, state]
+      properties:
+        result: { type: string, enum: [hit, miss] }
+        tileKey: { type: string }
+        seriesKey: { type: string }
+        correctSeriesKey:
+          type: string
+          description: |
+            Present only when the miss ends the game. Absent on every miss that leaves the game in
+            play, so that a wrong pair below the mistake limit discloses no pairing at all.
+        remainingWrong:
+          type: integer
+          description: Wrong pairs still available before the game ends. Absent unless the game ended.
+        state:
+          type: string
+          enum: [in_progress, won, lost]
+          description: Advisory for the client's own progress tracking; the server holds no state.
+
+    GroupsOutcome:
+      type: object
+      required: [result, state]
+      properties:
+        result: { type: string, enum: [hit, miss] }
+        tileKeys: { type: array, items: { type: string } }
+        criterion:
+          type: object
+          description: Present on a hit. The revealed shared fact.
+          properties:
+            type: { type: string, enum: [same_anime, same_season, same_language, same_voice_actor] }
+            animeId: { type: integer }
+            season: { type: string }
+            year: { type: integer }
+            language: { type: string }
+            personId: { type: integer }
+        overlap:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: |
+            Present on a miss. The largest number of the submitted tiles that belong to the same
+            hidden group, and 0 when no two submitted tiles share a group. A hint only: it names no
+            group, no tile, and no shared fact, and it is not itself a mistake beyond this attempt.
+        remainingGroups: { type: integer }
+        state:
+          type: string
+          enum: [in_progress, won, lost]
+          description: Advisory for the client's own progress tracking; the server holds no state.
