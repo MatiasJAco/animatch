@@ -22,8 +22,9 @@ The three v1 games are:
 
 1. **More or Less** - compare a hidden voice actor's career role count against an exposed one,
    ten rounds in a row.
-2. **Match the Series** - match characters or voice actors to their series from the current
-   season, three wrong matches ends the game.
+2. **Match the Series** - a three-by-three grid of current-season series titles with one character
+   or voice actor shown at a time on a single clue card above the grid; the visitor clicks the
+   series that entity belongs to, and three wrong clicks end the game.
 3. **Groups** - find the four shared criteria among sixteen tiles, five mistakes ends the game.
 
 ### Vocabulary
@@ -36,6 +37,9 @@ The three v1 games are:
 | Round | One question inside a game session |
 | Attempt | One player input validated against the day's puzzle |
 | Allowed fact | One of the eight permitted catalog facts listed below |
+| Grid tile | One cell of the three-by-three grid, showing one current-season series title |
+| Clue card | The single square above the grid showing one character or voice actor to place |
+| Mistake | One wrong click on a grid tile; three mistakes end Match the Series |
 
 ### Allowed facts (exhaustive)
 
@@ -69,11 +73,35 @@ Favorites ranking may be considered in a future version, but no v1 screen may us
   without naming the group.
 - Q: How does a visitor choose between Spanish and English? → A: Detect the visitor's browser
   language on the first visit and offer a visible control to switch.
-- Q: In Match the Series, does a wrong pairing that does not end the game reveal which series that
-  character belongs to? → A: No. Show only that it was wrong; reveal the correct pairings when the
+- Q: In Match the Series, does a wrong click that does not end the game reveal which series that
+  entity belongs to? → A: No. Show only that it was wrong; reveal the correct pairings when the
   game ends.
 - Q: How quickly must a page be usable on a mid-range phone on a normal connection? → A: Under 2
   seconds on a mid-range phone over 4G.
+
+### Session 2026-10-05
+
+- Q: How large is the Match the Series grid? → A: Three by three, so nine series titles and nine
+  clue cards per day. An earlier nine-by-nine draft of this session was corrected to three by three.
+- Q: What should the clue card above the three-by-three grid show for each character or voice
+  actor? → A: The entity's name as text plus one neutral in-project placeholder image, identical
+  in form for every clue card, with no image requested from any external host.
+- Q: When the visitor presses the Next button on the clue card, what happens to the current card?
+  → A: A free skip: it loads a different entity, costs nothing, and is counted neither as an
+  attempt nor as a mistake.
+- Q: When the debug reset button is pressed, what state should it clear for the current game?
+  → A: Only the visitor's own saved state for that game and UTC day in the browser; no
+  server-side change, so the day's stored puzzle is untouched.
+- Q: Who should see the debug reset control — should it exist in production? → A: Development
+  environments only; it appears nowhere while the site runs in production, so no visitor can use
+  it to replay a finished game.
+- Q: When the home-screen reset button is pressed, should it clear only what is saved in the
+  browser, or should it also delete today's stored puzzle rows from the database? → A: Clear the
+  saved state for all three games in the browser only; stored puzzle rows are never read or
+  written.
+- Q: After a wrong click rotates the clue card to another entity, can the entity that was showing
+  come back later in the same game? → A: The entity stays in the pool and may return on a later
+  mistake rotation or Next press; only correctly answered entities leave the deck.
 
 ---
 
@@ -149,33 +177,44 @@ over. The slice delivers a complete playable game by itself.
 
 ### User Story 3 - Play Match the Series (Priority: P2)
 
-The visitor opens Match the Series and reads the short help. Two four-by-four grids appear.
-The left grid holds sixteen characters or voice actors from the current season; the right grid
-holds sixteen series titles from the current season, in a different order. The visitor picks a
-tile on the left, then picks its series on the right. Each correct pair locks in. Three wrong
-pairs end the game.
+The visitor opens Match the Series and reads the short help. A single three-by-three grid of
+current-season series titles appears, with one clue card above it showing a character or a voice
+actor and their name. The visitor clicks the series that entity belongs to. A correct click
+colors that tile green, locks it, and immediately loads another entity onto the clue card. A
+wrong click colors nothing, reveals nothing, costs one of three mistakes, and rotates the clue
+card to another entity, which may be shown again later. Coloring all nine tiles green wins; the
+third wrong click ends the game and reveals every pairing.
 
 **Why this priority**: This is the game that makes the site feel current, but it depends on
 current-season catalog coverage, so it lands after the simpler game proves the pipeline.
 
-**Independent Test**: Open the game, complete all sixteen correct pairs and confirm the win
-summary; separately make three wrong pairs and confirm game over on the third. The slice is
+**Independent Test**: Click the correct series for all nine clue cards and confirm the win
+summary; separately click three wrong series and confirm game over on the third. The slice is
 independently playable and testable.
 
 **Acceptance Scenarios**:
 
-1. **Given** a fresh Match the Series puzzle, **When** the visitor loads the game, **Then**
-   sixteen left tiles and sixteen right series titles appear, all from the current season, in
-   two grids of four by four.
-2. **Given** the visitor has selected a left tile, **When** they select the correct series,
-   **Then** both tiles lock as correctly matched and the correct pairing is marked.
-3. **Given** three wrong pairs have been made, **When** the third wrong pair is submitted,
-   **Then** the game ends immediately as a loss and the correct pairings are revealed.
-4. **Given** all sixteen pairs are matched, **When** the last correct pair is submitted, **Then**
-   the game is marked won and the summary is shown with the share action available.
-5. **Given** fewer than three wrong pairs, **When** the visitor submits a wrong pair, **Then** the
-   pair is reported as wrong, both tiles return to unselected, and the correct series for that
-   character is not shown.
+1. **Given** a fresh Match the Series puzzle, **When** the visitor loads the game, **Then** one
+   grid of nine tiles appear, each showing a distinct series title from the current season,
+   together with exactly one clue card above the grid.
+2. **Given** a clue card is showing an entity, **When** the visitor clicks the tile of the series
+   that entity belongs to, **Then** that tile is colored green, is locked against further input,
+   and the next entity is loaded onto the clue card automatically.
+3. **Given** any clue card is showing, **When** the visitor activates the Next control, **Then**
+   another, different entity is loaded onto the clue card, the game continues, already-green
+   tiles are unaffected, and neither the attempt count nor the mistake count changes.
+4. **Given** three wrong clicks have been made, **When** the third wrong click is made, **Then**
+   the game ends immediately as a loss and the correct pairing of every tile is revealed.
+5. **Given** fewer than three mistakes, **When** the visitor clicks a wrong series, **Then** the
+   click is reported as wrong, that tile stays uncolored and playable, the correct series for that
+   entity is not shown, and the clue card has already rotated to a different entity.
+6. **Given** all nine tiles are green, **When** the last correct click is made, **Then** the
+   game is marked won and the summary is shown with the share action available.
+7. **Given** a tile is already green, **When** the visitor clicks it, **Then** nothing changes and
+   the click is not counted as an attempt or a mistake.
+8. **Given** a mistake rotated the clue card away from an entity, **When** later rotations or Next
+   presses occur, **Then** that entity may be shown again, and the visitor is never left without
+   a playable clue card as a result.
 
 ---
 
@@ -258,6 +297,47 @@ error state must appear, then the normal home page after retry.
 
 ---
 
+### User Story 7 - Return home or reset a game while debugging (Priority: P3)
+
+Every game screen carries a control back to the home page, so a visitor can leave a game without
+a browser back gesture or a page reload, and their saved state for the day is untouched for when
+they come back. The same screen carries a reset control for development: pressing it clears the
+visitor's own saved state for that game and day so the puzzle can be played again from the start,
+with no manual database edit and no change to the puzzle any other visitor is given. The home page
+carries a matching development control that clears all three games' saved state in one action, so
+an entire day can be retested without touching stored data by hand.
+
+**Why this priority**: Neither control adds player-facing game value, but leaving a game without
+losing your place is basic navigation, and the reset control removes the manual stored-data
+cleanup that currently blocks every retest of a day's puzzle.
+
+**Independent Test**: Start a game, leave via the home control and return to confirm the same
+round resumes; then press reset and confirm the game starts over while the puzzle itself is
+unchanged.
+
+**Acceptance Scenarios**:
+
+1. **Given** a game in progress, **When** the visitor activates the home control, **Then** the
+   home page loads and that game's saved state for the day is unchanged, so opening the game again
+   resumes the same position.
+2. **Given** a game already finished today, **When** the visitor activates the home control,
+   **Then** the home page loads and still marks that game as finished today.
+3. **Given** a game with saved state, **When** the visitor activates the reset control, **Then**
+   that game and day's saved state is cleared and the screen shows the day's puzzle from its
+   start with the attempt and mistake counts back at zero.
+4. **Given** the reset control is pressed, **When** the puzzle is requested again, **Then** the
+   same puzzle is served and no stored puzzle was created, changed, or deleted.
+5. **Given** the site runs in production, **When** any game screen loads, **Then** no reset
+   control appears, and a visitor cannot clear a finished-today result to replay that game.
+6. **Given** saved state for one or more games, **When** the developer activates the home reset
+   control, **Then** the saved state of all three games for the current UTC day is cleared, each
+   game is playable from the start again, and the visitor's language choice still applies.
+7. **Given** the home reset control was activated, **When** the day's puzzles are requested
+   again, **Then** the same three puzzles are served, and no stored puzzle row was read, created,
+   changed, or deleted.
+
+---
+
 ### Edge Cases
 
 - **Rollover during play**: the visitor's local date and the UTC date disagree, or the day rolls
@@ -271,17 +351,30 @@ error state must appear, then the normal home page after retry.
   the same people, characters, and series may appear again on a later day.
 - **Invalid attempt**: an attempt naming a character or person that is not in the day's puzzle,
   or not in the catalog at all, is rejected as an invalid attempt and never silently ignored.
-- **Empty or exhausted catalog coverage**: the current calendar season contains no series, or
-  too few distinct series, characters, or people to fill a board or a chain. The affected game
-  must show the bilingual error state rather than a short, unfair, duplicated, or older-season
-  board.
+- **Empty or exhausted catalog coverage**: the current calendar season contains fewer than nine
+  series, or too few distinct series, characters, or people to fill a board, a clue pool, or a
+  chain. The affected game must show the bilingual error state rather than a short, unfair,
+  duplicated, or older-season board.
 - **Ties in More or Less**: the hidden count equals the visible count, so neither "more" nor
   "less" is correct. This must not be presented as a round with no valid answer.
 - **Duplicate tiles in Groups**: two tiles label the same person or character, making a group
   ambiguous.
-- **Wrong pairing that does not end the game**: in Match the Series, a mistake below the mistake
-  limit. The tiles go back to unselected, the mistake is counted, and nothing about the correct
-  pairing is shown.
+- **Wrong tile click that does not end the game**: in Match the Series, a mistake below the
+  mistake limit. The tile stays uncolored and playable, the mistake is counted, nothing about the
+  correct series is shown, and the clue card rotates to another entity.
+- **Mistake rotation with nothing else available**: a mistake occurs when no different entity is
+  left to rotate to. The mistake is still counted, the same entity keeps showing, and play
+  continues rather than ending or blocking.
+- **Third mistake**: the game ends on the third wrong click. No rotation happens, the abandoned
+  entity is irrelevant, and every pairing is revealed.
+- **Entity that belongs to more than one grid series**: a character or voice actor appearing in
+  more than one of the nine series would have no single correct answer, so such an entity is
+  never placed on a clue card.
+- **Clue cards exhausted**: the visitor has used Next until no different clue card remains. Next
+  becomes disabled, the game continues with the entity already showing, and play is never blocked
+  or ended by an exhausted pool.
+- **Skipping is unlimited**: Next costs nothing, so a visitor may skip freely. This MUST NOT alter
+  the mistake limit, and a skipped card MUST NOT be re-served after being answered.
 - **Scattered guess in Groups**: a wrong proposal whose tiles come from two or more different
   groups, or from none. The feedback count is the largest number sharing one group, so a scattered
   guess can report 1 or 0 even when several tiles are individually part of some group.
@@ -297,6 +390,26 @@ error state must appear, then the normal home page after retry.
   switches the whole page without a reload, including the help text and any error state on screen.
 - **Stale client data**: client-held state from a future or malformed day key is discarded
   silently.
+- **Reset with no saved state**: the reset control is pressed on a screen with nothing saved for
+  that game and day. It is a no-op that leaves the game fully playable from the start.
+- **Reset while a game is in progress**: the game returns to its first round or board position
+  with the attempt and mistake counts back at zero, and the day's puzzle itself is unchanged.
+- **Device storage unavailable**: on a browser that cannot store state, the reset control
+  performs no write and play continues unaffected.
+- **Reset must not reach the server**: the reset control MUST work with the network unavailable,
+  because it touches only device storage.
+- **Reset in production**: the control is absent, so the finished-today result on the home page
+  cannot be cleared by a visitor and a finished game stays final for the day.
+- **Home reset with nothing saved**: the home reset control is pressed with no saved state for any
+  game today. It is a no-op that leaves all three games playable from the start.
+- **Home reset on a different day**: the home reset control is pressed the day after a game was
+  finished. Nothing from the previous day existed to clear, and today's games stay playable from
+  the start.
+- **Home reset and stored preferences**: the home reset control clears game state only. The
+  visitor's language choice and any other stored preference survive it.
+- **Home reset on a page that failed to load**: the home page shows its error state because the
+  catalog is unreachable. The reset control still clears device state for all three games, and
+  retrying afterwards loads the same puzzles as any other visitor receives.
 
 ---
 
@@ -339,6 +452,29 @@ error state must appear, then the normal home page after retry.
 - **FR-015**: A finished-today state MUST NOT be shown for a result from any other UTC day.
 - **FR-016**: The home page MUST be usable on a phone-sized screen without horizontal scrolling.
 
+### Navigation and Debug Reset
+
+- **FR-056**: Every game screen MUST offer a visible control that returns the visitor to the home
+  page, available at all times including while a game is in progress and on the won or lost
+  screen, and it MUST NOT discard that game's saved state for the day.
+- **FR-057**: Every game screen MUST offer a visible reset control that clears the visitor's own
+  saved state for that game and the current UTC day from device storage and returns that screen to
+  the start of the day's puzzle. Its label MUST come from the message catalog in both languages.
+- **FR-057a**: The reset control is a development tool and MUST NOT appear anywhere while the
+  site runs in production, so that no visitor can clear a finished-today result and replay that
+  game. In any other environment it MUST be reachable on every game screen.
+- **FR-057b**: The home page MUST offer a control that clears, in a single action, the visitor's
+  own saved state for all three games for the current UTC day, so that a developer can retest a
+  day without deleting stored data by hand. Its label MUST come from the message catalog in both
+  languages.
+- **FR-057c**: The home reset control MUST NOT read, create, change, or delete any stored puzzle
+  row on the server, and MUST leave the visitor's language choice and any other stored preference
+  intact. Like every other reset control, it MUST NOT appear while the site runs in production, so
+  no visitor can clear a finished-today result and replay that game.
+- **FR-058**: The reset control MUST affect only the visitor's own device state. It MUST NOT
+  create, change, or delete the day's stored puzzle on the server, and MUST NOT change the puzzle
+  served to any other visitor.
+
 ### More or Less
 
 - **FR-017**: Each round MUST show two voice actors: the left one with the career role count
@@ -360,28 +496,57 @@ error state must appear, then the normal home page after retry.
 
 ### Match the Series
 
-- **FR-024**: The game MUST show two grids of four by four: sixteen left tiles of characters or
-  voice actors, and sixteen right tiles of series titles, drawn from the current season and
-  arranged in different orders.
-- **FR-025**: The visitor MUST be able to select a left tile and then select the series it belongs
-  to, in that order.
-- **FR-026**: A correct pair MUST lock both tiles as matched and MUST NOT accept further input on
-  them.
-- **FR-027**: Three incorrect pairs MUST end the game immediately and reveal the correct
-  pairings.
-- **FR-027a**: An incorrect pair that does not end the game MUST report only that the pair was
-  wrong. It MUST NOT reveal the correct series for that character, or any other correct pairing,
-  and the two tiles MUST return to an unselected state so the visitor may try again.
-- **FR-028**: Matching all sixteen pairs MUST complete the game as a win.
-- **FR-029**: Each left tile MUST show the entity's name as text together with a neutral
+- **FR-024**: The game MUST show exactly one grid of three by three: nine tiles, each showing
+  one distinct series title from the current season, together with exactly one clue card above
+  the grid. It MUST NOT show a second grid of characters or voice actors.
+- **FR-024a**: The clue card MUST show one character or one voice actor at a time, identified by
+  catalog id, and that entity MUST belong to exactly one of the grid's nine series, so the
+  answer is never ambiguous.
+- **FR-025**: The visitor MUST answer by clicking a single grid tile for the entity currently on
+  the clue card. There MUST NOT be a first step that selects an entity tile and a second step that
+  selects its series.
+- **FR-026**: A correct click MUST color that tile green, MUST lock it against further input, and
+  MUST advance the visitor's position in the game.
+- **FR-026a**: After a correct click resolves, the clue card MUST load the next entity
+  automatically, with no further action from the visitor.
+- **FR-026b**: The game MUST offer a Next control that loads another entity onto the clue card
+  without ending the game and without altering any already-green tile. Next is a free skip: it
+  MUST NOT be counted as an attempt, MUST NOT be counted as a mistake, and MUST NOT change the
+  attempt or mistake counts reported at the end of the game.
+- **FR-026c**: A clue card loaded by Next MUST be a different entity from the one it replaced, and
+  MUST NOT be an entity the visitor has already answered correctly in this game.
+- **FR-026d**: When no different clue card remains that satisfies FR-026c, Next MUST be disabled
+  and the game MUST continue with the entity already showing rather than ending or blocking play.
+- **FR-027**: Three incorrect clicks MUST end the game immediately and reveal the correct pairing
+  of every tile.
+- **FR-027a**: An incorrect click that does not end the game MUST report only that the answer was
+  wrong. It MUST NOT reveal the correct series for that entity, or any other correct pairing; the
+  clicked tile MUST stay uncolored and remain playable, and the mistake MUST be counted.
+- **FR-027b**: A click on a tile that is already green MUST change nothing and MUST NOT be counted
+  as an attempt or as a mistake.
+- **FR-027c**: An incorrect click MUST rotate the clue card to a different entity automatically,
+  with no further action from the visitor, whenever an entity satisfying FR-026c is available, and
+  MUST NOT leave the abandoned entity showing in that case. The rotation MUST NOT reveal the
+  correct series for the abandoned entity or for any other entity, and MUST NOT change the mistake
+  limit. When no such entity is available, the mistake is still counted and the same entity keeps
+  showing.
+- **FR-027d**: The entity abandoned by a mistake rotation MUST remain in the pool and MAY be
+  loaded again by a later mistake rotation or by the Next control. Only a correctly answered
+  entity leaves the pool.
+- **FR-028**: Coloring all nine tiles green MUST complete the game as a win.
+- **FR-029**: The clue card MUST show the entity's name as text together with a neutral
   placeholder image area. The placeholder MUST be original, in-project, and identical in form for
-  every tile; no external image may be fetched, and no image source is stored in the day's puzzle.
-  The design MUST allow real artwork to be added later as a separate change that does not alter
-  puzzle content, puzzle identity, or any answer.
+  every clue card; no external image may be fetched, and no image source is stored in the day's
+  puzzle. The design MUST allow real artwork to be added later as a separate change that does not
+  alter puzzle content, puzzle identity, or any answer.
+- **FR-029a**: The generator MUST NOT place on a clue card an entity that appears in more than one
+  of the day's nine series, and MUST NOT place an entity whose series is absent from the
+  grid.
 - **FR-030**: "Current season" MUST mean the calendar season at play time, in UTC, identified by
-  the season together with its year. The system MUST NOT substitute an older season. If the
-  catalog holds no series for that season, Match the Series MUST show the bilingual error state
-  with a retry action, exactly as for any other unavailable puzzle.
+  the season together with its year. The system MUST NOT substitute an older season, and MUST NOT
+  shrink the grid below three by three. If the catalog holds fewer than nine series for that
+  season, Match the Series MUST show the bilingual error state with a retry action, exactly as for
+  any other unavailable puzzle.
 
 ### Groups
 
@@ -468,9 +633,9 @@ error state must appear, then the normal home page after retry.
 ### Out of Scope for v1
 
 The following are explicitly excluded from v1 and MUST NOT be built: user accounts or any login,
-server-side history or result storage, streaks, bingo, impostor, pyramid, timed mode, an archive
-or browse view of past days, and any catalog editing or catalog write of any kind. Favorites
-ranking is not used in v1 and may be considered later.
+server-side history or result storage, streaks, a bingo game separate from Match the Series,
+impostor, pyramid, timed mode, an archive or browse view of past days, and any catalog editing or
+catalog write of any kind. Favorites ranking is not used in v1 and may be considered later.
 
 ### Key Entities
 
@@ -484,8 +649,12 @@ ranking is not used in v1 and may be considered later.
   a role.
 - **Daily puzzle**: the stored, immutable set of inputs for one game on one UTC day: its round
   chain, its tile grids, or its group layout.
-- **Puzzle item**: one stored element of a daily puzzle, such as a pair in More or Less, a
-  character and its series in Match the Series, or a group's four tiles and its criterion.
+- **Grid tile**: one cell of the Match the Series three-by-three grid, showing one current-season
+  series title, with a state of unclicked or green.
+- **Clue card**: the single Match the Series card showing one character or voice actor, its name,
+  and a neutral placeholder image area, whose entity belongs to exactly one grid tile's series.
+- **Puzzle item**: one stored element of a daily puzzle, such as a pair in More or Less, a grid
+  tile and its clue card in Match the Series, or a group's four tiles and its criterion.
 - **Client result**: a won-or-lost end state held on the visitor's device, keyed by game and UTC
   day, with its attempt count, which is every answer given and correct or wrong, excluding attempts
   rejected as invalid.
@@ -533,19 +702,38 @@ ranking is not used in v1 and may be considered later.
 - **SC-017**: The site opens in the visitor's browser language when it is Spanish or English and in
   Spanish otherwise, and a switch made with the language control takes effect immediately and
   persists on later visits, in 100% of checks.
-- **SC-018**: In Match the Series, no wrong pairing below the mistake limit reveals the correct
-  series for that character or any other pairing, in 100% of wrong pairings checked.
+- **SC-018**: In Match the Series, no wrong click below the mistake limit reveals the correct
+  series for that entity or any other pairing, in 100% of wrong clicks checked.
 - **SC-019**: On a mid-range phone over a 4G connection, the home page shows all three games and a
   game page shows a playable puzzle in under 2 seconds in at least 95% of measurements, with no
   client-side loading step after the page appears.
+- **SC-020**: In Match the Series, every clue card names an entity that belongs to exactly one of
+  the grid's nine series, in 100% of cards checked, so no card has zero or more than one
+  possible answer.
+- **SC-021**: In Match the Series, pressing Next changes neither the attempt count nor the mistake
+  count and never ends the game, in 100% of presses checked, and Next is disabled rather than
+  repeating an already-answered entity.
+- **SC-026**: In Match the Series, every wrong click below the mistake limit rotates the clue card
+  to a different entity in 100% of wrong clicks checked, reveals no correct pairing, and leaves
+  the abandoned entity available to be shown again later.
+- **SC-022**: Every game screen offers a working control back to the home page, in 100% of game
+  screens checked, while playing and after finishing, and leaving that way never loses the day's
+  saved progress.
+- **SC-023**: After the reset control is pressed, the same day's puzzle is served again unchanged
+  and no stored puzzle was written or deleted, in 100% of resets checked.
+- **SC-024**: No reset control appears anywhere while the site runs in production, confirmed by
+  inspection in 100% of checks, so a finished game cannot be replayed today through it.
+- **SC-025**: The home reset control clears all three games' saved state for the day in one
+  action in 100% of activations, leaves the visitor's language choice intact, and is followed by
+  the same three puzzles being served with no stored puzzle row written or deleted.
 
 ### Edge-Case Coverage
 
 - **EC-001**: A day whose setup would duplicate an earlier day's setup is resolved to a different
   valid setup, or reported as an error state; it never silently reuses a previous setup.
-- **EC-002**: A day whose calendar season has no catalog coverage, or too little coverage for a
-  full board, is reported as a bilingual error state with retry. Match the Series never
-  substitutes an older season, and no game serves a short, unfair, or duplicated board.
+- **EC-002**: A day whose calendar season has no catalog coverage, or fewer than nine series, is
+  reported as a bilingual error state with retry. Match the Series never substitutes an older
+  season and never shrinks the grid, and no game serves a short, unfair, or duplicated board.
 - **EC-003**: A player in a timezone whose local date differs from the UTC date still receives the
   UTC day's puzzle and sees times in their own timezone.
 
@@ -555,7 +743,7 @@ ranking is not used in v1 and may be considered later.
 
 - User accounts, login, or any server-side visitor record.
 - Server-side history, statistics, or result storage.
-- Streaks, bingo, impostor, pyramid, and timed mode.
+- Streaks, a bingo game separate from Match the Series, impostor, pyramid, and timed mode.
 - An archive or browse view of past days.
 - Any edit or write to the catalog, including the import job tables.
 - Favorites ranking in v1.
@@ -581,6 +769,9 @@ ranking is not used in v1 and may be considered later.
 - Visitors arrive on a modern phone or desktop browser with a stable connection for the session;
   intermittent connectivity is handled by the retry behavior, not by offline play.
 - Copy, help text, and visual design are written from scratch for this project.
+- Every reset control, including the home control that clears all three games at once, is a
+  development-only tool for retesting a day's puzzle; no production visitor can use one, so the
+  finished-today result stays final for real play.
 - Planned follow-ups that are not part of v1 may include favorites ranking, but no v1 requirement
   may depend on them.
 
@@ -595,7 +786,9 @@ ranking is not used in v1 and may be considered later.
 Three points were open during drafting and have been decided, so no clarification markers remain:
 
 - **Role count** (FR-023): a career role count is every voice role record attributed to the person.
-- **Tile images** (FR-029): text name plus a neutral in-project placeholder in v1; real artwork
-  arrives later as a separate change that does not touch puzzle content or answers.
+- **Clue card images** (FR-029): the clue card shows the entity's name plus a neutral in-project
+  placeholder, identical for every card; real artwork arrives later as a separate change that
+  does not touch puzzle content or answers.
 - **Current season** (FR-030, FR-038): the calendar season at play time in UTC, identified by
-  season and year; no older-season substitution, and an error state when it has no coverage.
+  season and year; no older-season substitution, no smaller grid, and an error state when the
+  season has fewer than nine series.

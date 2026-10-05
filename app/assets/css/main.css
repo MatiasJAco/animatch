@@ -259,6 +259,61 @@ a {
   gap: 0.4rem;
 }
 
+/* FR-024: exactly one grid of three by three current-season series. */
+.grid-3x3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+/* FR-026: a correct click colors the tile green and locks it. */
+.tile--green {
+  color: var(--correct);
+  border-color: var(--correct);
+  background: var(--surface-alt);
+}
+
+/* FR-024a / FR-029: one card above the grid, with the project's own neutral placeholder. */
+.clue-card {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem;
+}
+
+.clue-card__art {
+  flex: 0 0 auto;
+  width: 64px;
+  aspect-ratio: var(--tile-aspect);
+  border-radius: calc(var(--radius) - 4px);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--surface-alt) 0 8px,
+      var(--border) 8px 16px
+    );
+}
+
+.clue-card__body {
+  min-width: 0;
+}
+
+.clue-card__kind {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.clue-card__name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .share-text {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
@@ -279,6 +334,68 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
+}
+
+.game-header-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.game-header-controls__link {
+  font: inherit;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.game-header-controls__link:hover {
+  border-color: var(--accent);
+}
+
+.reveal-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reveal-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  padding: 0.25rem 0;
+}
+
+.home-reset-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 1rem;
+}
+
+.home-reset-controls__link {
+  font: inherit;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.home-reset-controls__link:hover {
+  border-color: var(--accent);
 }
 
 .comparison {

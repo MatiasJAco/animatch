@@ -17,6 +17,7 @@ import {
   MatchInvalidAttemptError,
   parseMatchAttempt,
   resolveMatchOutcome,
+  verifyMatchProgress,
   type MatchTheSeriesAttemptBody,
   type MatchTheSeriesPayloadData,
   type MatchTheSeriesSolution,
@@ -25,6 +26,7 @@ import {
   GroupsInvalidAttemptError,
   parseGroupsAttempt,
   resolveGroupsOutcome,
+  verifyGroupsProgress,
   type GroupsAttemptBody,
   type GroupsPayloadData,
   type GroupsSolution,
@@ -48,16 +50,19 @@ async function resolveAttempt(game: string, body: unknown) {
     const payload = stripSignature(row.payload) as MatchTheSeriesPayloadData
     const solution = row.solution as MatchTheSeriesSolution
 
-    // The board lives on the device. It arrives here as request context only; the server
-    // stores nothing, and the outcome never carries an attempt count (FR-041, R-012).
-    const context = (body ?? {}) as { matched?: string[]; misses?: unknown }
-    const matched = Array.isArray(context.matched)
-      ? new Set(context.matched.filter((key) => typeof key === 'string'))
-      : new Set<string>()
-    const misses = Number.isInteger(context.misses) ? Number(context.misses) : 0
-
+    // Constitution IV: the board lives on the device, so the server stores nothing
+    // (FR-041, R-012). The device presents the pairs it has already scored and the server
+    // re-derives the green tiles and the mistake count from the stored answer key.
     const attempt = parseMatchAttempt((body ?? {}) as MatchTheSeriesAttemptBody)
-    return { outcome: resolveMatchOutcome(payload, solution, attempt, { matched, misses }) }
+    const progress = verifyMatchProgress(solution, attempt.greenPairs, attempt.missLog)
+    // FR-026: the outcome echoes the clicked pair and nothing else, so the evidence lists
+    // stay on this side of the boundary.
+    return {
+      outcome: resolveMatchOutcome(payload, solution, {
+        clueKey: attempt.clueKey,
+        seriesKey: attempt.seriesKey,
+      }, progress),
+    }
   }
 
   if (game === 'groups') {
@@ -66,16 +71,13 @@ async function resolveAttempt(game: string, body: unknown) {
     const solution = row.solution as GroupsSolution
 
     const knownKeys = new Set(payload.tiles.map((tile) => tile.key))
-    const { tileKeys, consumed } = parseGroupsAttempt(
-      (body ?? {}) as GroupsAttemptBody,
-      knownKeys,
-    )
+    const attempt = parseGroupsAttempt((body ?? {}) as GroupsAttemptBody, knownKeys)
 
-    // The device owns the mistake count, so it arrives with the proposal as request context.
-    const context = (body ?? {}) as { mistakes?: unknown }
-    const mistakes = Number.isInteger(context.mistakes) ? Number(context.mistakes) : 0
+    // Constitution IV: the found groups and the rejected proposals are re-checked against
+    // the stored solution, so neither the consumed tiles nor the mistake count is believed.
+    const progress = verifyGroupsProgress(solution, attempt.foundGroups, attempt.missLog)
 
-    return { outcome: resolveGroupsOutcome(solution, tileKeys, mistakes, consumed) }
+    return { outcome: resolveGroupsOutcome(solution, attempt.tileKeys, progress) }
   }
 
   return { error: 'UNSUPPORTED' as const }

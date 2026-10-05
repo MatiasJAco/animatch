@@ -1,10 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   getCalendarSeason,
   getNextUtcRollover,
   getUtcDateNow,
   utcDateFrom,
 } from '../server/utils/day'
+
+const originalTz = process.env.TZ
+
+afterEach(() => {
+  if (originalTz === undefined) {
+    delete process.env.TZ
+  } else {
+    process.env.TZ = originalTz
+  }
+})
 
 describe('UTC day rule', () => {
   it('derives a UTC civil date that rolls over at 00:00 UTC', () => {
@@ -26,5 +36,16 @@ describe('UTC day rule', () => {
       season: 'fall',
       year: 2026,
     })
+
+    // The browser timezone may only format a date for display, never decide the day key
+    // (Principle III). The same instant must yield the same key in every zone, including
+    // one that is hours ahead and one that is hours behind UTC.
+    const instant = new Date('2026-03-14T23:30:00.000Z')
+    const seen: string[] = []
+    for (const tz of ['UTC', 'Asia/Tokyo', 'America/New_York', 'Pacific/Kiritimati']) {
+      process.env.TZ = tz
+      seen.push(utcDateFrom(instant))
+    }
+    expect(new Set(seen)).toEqual(new Set(['2026-03-14']))
   })
 })

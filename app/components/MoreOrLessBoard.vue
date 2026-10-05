@@ -6,6 +6,11 @@ import type {
   MoreOrLessOutcome,
 } from '~~/server/game/moreOrLess'
 import { useLocale } from '~/composables/useLocale'
+import {
+  isRetryableCode,
+  readErrorCode,
+  type AttemptErrorCode,
+} from '~/composables/attemptFailure'
 
 const props = defineProps<{
   puzzle: MoreOrLessPuzzleData
@@ -24,6 +29,10 @@ const round = ref(props.initialRound ?? 0)
 const revealed = ref(false)
 const lastOutcome = ref<MoreOrLessOutcome | null>(null)
 const busy = ref(false)
+// Principle V: a rejected or failed attempt is shown, with a retry that replays the
+// same request rather than counting an extra attempt.
+const attemptError = ref<AttemptErrorCode | null>(null)
+const lastAnswer = ref<MoreOrLessAnswer | null>(null)
 
 // The right-hand count must survive the transition into the next round: the payload only
 // carries the opening count, and each later value arrives from the previous outcome.
@@ -45,6 +54,7 @@ const isGameOver = computed(() => {
 const submit = async (answer: MoreOrLessAnswer) => {
   if (busy.value || isGameOver.value) return
   busy.value = true
+  attemptError.value = null
   try {
     const res = await fetch('/api/daily/more_or_less/attempt', {
       method: 'POST',
@@ -52,6 +62,10 @@ const submit = async (answer: MoreOrLessAnswer) => {
       body: JSON.stringify({ round: round.value, answer }),
     })
     if (!res.ok) {
+      // Principle V: the panel names the failure the server reported. A rejected attempt is
+      // deterministic, so it gets no Retry; only a code that can succeed is replayable.
+      lastAnswer.value = answer
+      attemptError.value = await readErrorCode(res)
       return
     }
     const outcome = (await res.json()) as MoreOrLessOutcome
@@ -74,8 +88,18 @@ const submit = async (answer: MoreOrLessAnswer) => {
     round.value = outcome.round + 1
     revealed.value = false
     emit('outcome', { ...outcome, attempts: attempts.value, round: round.value })
+  } catch {
+    lastAnswer.value = answer
+    attemptError.value = 'DATABASE_UNAVAILABLE'
   } finally {
     busy.value = false
+  }
+}
+
+const retry = () => {
+  const answer = lastAnswer.value
+  if (answer) {
+    void submit(answer)
   }
 }
 </script>
@@ -95,6 +119,13 @@ const submit = async (answer: MoreOrLessAnswer) => {
         <span class="badge">{{ given }}</span>
       </div>
     </div>
+
+    <ErrorPanel
+      v-if="attemptError"
+      :code="attemptError"
+      :pending="busy"
+      :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
+    />
 
     <div v-if="!isGameOver" class="row">
       <button type="button" :disabled="busy" @click="submit('more')">

@@ -64,6 +64,166 @@ one puzzle per day stored once, so there is no other per-game data to normalize.
 
 ---
 
+## R-019: Match the Series board shape and clue deck size
+
+**Decision**: The grid is the answer board: nine current-season series titles in a three-by-three
+grid. The stored puzzle also carries a **clue deck** of eighteen cards, two unambiguous entities per
+grid series (a character and a person wherever the coverage allows, otherwise the second card is
+another entity of whatever kind exists). Grid tiles are identified by series key; the solution maps
+each clue card key to exactly one grid series key. The deck is shuffled once by the generator and
+served in that order.
+
+**Rationale**: FR-028 needs nine green tiles and every tile needs an answerable card, so nine cards
+is the floor. FR-026c requires Next to supply a *different, not-yet-answered* card, and with exactly
+nine cards a player who skipped through the deck would exhaust it and lose Next after FR-026d
+disabled it, which reads as a broken button rather than a finished puzzle. Two cards per series
+keeps at least two ways to green every tile, so Next stays useful for the whole game, while the
+payload stays small: eighteen small objects, one row read, no extra table. Two cards per series also
+means the character and person variants the user described ("a character name and their image, or a
+voice actor and their photo") both appear for most series without a separate rule.
+
+**Alternatives considered**: Exactly nine cards, one per series (rejected: Next dies early, and the
+pool of unambiguous entities per series is thin for some titles). A large deck of forty or more
+(rejected: more payload, and repeated cards for one series read as a bug). Dealing one card at a
+time from a shuffled deck (rejected: a client-side shuffle would reshuffle on every reload and break
+the "resume the same board position" guarantee; a server-side deal needs server state, which
+Principle IV forbids).
+
+---
+
+## R-020: The attempt names the clue card and the clicked series
+
+**Decision**: `POST /api/daily/match_the_series/attempt` takes `{ "clueKey": "c:12345",
+"seriesKey": "a:9001" }`. Both keys must be members of the day's stored puzzle; anything else is
+`INVALID_ATTEMPT`. Next never reaches the server.
+
+**Rationale**: FR-025 removed the first selection step, so one click is the whole answer, but the
+server still has to know *which* clue card was being answered when it validates against the stored
+solution. A bare `seriesKey` cannot express that: the server would have to assume the first
+unanswered card, which silently mis-scores a client whose displayed card and stored progress have
+drifted apart after a reload. Naming the card keeps the endpoint stateless and still exact.
+
+**Alternatives considered**: `seriesKey` alone, assuming the first unsolved card (rejected: wrong
+answer scored against the wrong card after any resume). A server-side "current card" (rejected: that
+is game state, which Principle IV forbids). Sending the whole deck position (rejected: more surface
+for the same information).
+
+---
+
+## R-021: Where the grid state and the free skip live
+
+**Decision**: Everything the board needs to resume lives on the device: the set of green series
+keys, the set of answered clue card keys, the mistake count, and the index of the clue card showing.
+Next walks the served deck order to the next card that is not in the answered set, changes no
+counter, and is disabled when no such card remains. The server keeps nothing.
+
+**Rationale**: The server is stateless by design (R-012, Principle IV), so any state that must
+survive a reload has to be on the device (FR-043a). Deck order comes from the stored payload, so it
+is identical on every request for that day and a resumed board looks exactly like the one the player
+left. Serving the deck in a fixed order also keeps Next predictable rather than arbitrary.
+
+**Alternatives considered**: Reshuffling the deck client-side on each load (rejected: Next would feel
+random and the resumed board would differ from the abandoned one). Randomly choosing the Next target
+(rejected: same problem). Keeping the deck position server-side (rejected: Principle IV).
+
+---
+
+## R-022: Making the debug reset a development-only control
+
+**Decision**: The reset control is rendered only under Nuxt's build-time development flag
+(`import.meta.dev`), so a production bundle does not contain it at all. It clears the one game's
+entry from `animatch:v1:progress` in the browser and calls no endpoint. The home control is
+unconditional.
+
+**Rationale**: FR-057a requires the control to be absent in production, and a build-time flag makes
+that structural rather than conditional: the button cannot be reached by keyboard or script in a
+production bundle, so no visitor can clear a finished result and replay a game (FR-043). FR-058
+requires the control to touch device state only, so there is no server route to write and therefore
+no unauthenticated mutation surface to protect.
+
+**Alternatives considered**: A runtime environment variable (rejected: it can be misconfigured in
+exactly the deployment where it matters, and it would leave the control reachable by default). A
+server route that deletes the day's stored puzzle (rejected: violates FR-058, and it would change the
+puzzle for every other visitor that day, breaking FR-003 and SC-002). Hiding the control with CSS in
+production (rejected: it would stay in the DOM and remain focusable).
+
+---
+
+## R-023: One shared game header for both controls
+
+**Decision**: A single shared component is rendered in every game page's header. It carries the home
+control always and the reset control in development, and both labels come from the message catalog so
+both languages stay complete (FR-049, FR-057).
+
+**Rationale**: FR-056 requires the home control on every game screen, including while a game is in
+progress and on the result screen. One component used by all three pages is the only way that
+requirement cannot drift page by page; three hand-written links are three chances to forget one.
+Putting the controls in the header keeps them above the fold on a phone, which is where a player
+mid-round looks for a way out.
+
+**Alternatives considered**: A footer link (rejected: below the fold on a phone and easy to miss
+mid-game). A browser-history back button (rejected: FR-056 requires a real route back to home, and
+history back can leave the site entirely). A per-page control (rejected: duplication and drift).
+
+---
+
+## R-024: A home control that clears all three games, without a server write
+
+**Decision**: The home page carries one control, in development builds only, that clears all three
+games' entries from `animatch:v1:progress` in a single storage operation and leaves
+`animatch:v1:prefs` untouched. It is a small component beside the game list, labeled from the message
+catalog (FR-057b, FR-057c). No server route is added, and the day's `daily_puzzles` rows are never
+read, written, or deleted. It uses the same two-step confirmation as the per-game control so the two
+do not behave differently under a fast double-click.
+
+**Rationale**: The user asked for a debug control that removes the need to reach into the database by
+hand. Two facts make a database delete the wrong tool. First, generation is deterministic in the game
+and the day (R-005), so deleting today's row and re-requesting recreates the identical board; the
+delete would change nothing a developer can see. Second, FR-042 keeps the finished-today state on the
+device, and that device state is the only thing that actually blocks a retest. Clearing it is
+therefore both sufficient and the smaller change. It also keeps FR-058 and Principle III intact by
+construction, since no code path from a page can reach the puzzle table, and it leaves no endpoint
+that a future mistake could turn into a write. Clearing three entries at once is one write of the
+progress blob rather than three operations, so the control cannot leave a partially cleared store.
+
+**Alternatives considered**: A development-only endpoint that deletes the three rows and regenerates
+(rejected: adds a server write path for no observable gain, since the regenerated board is identical
+by R-005, and it would need its own production gate to satisfy FR-057c). A per-game control on each
+home card (rejected: three controls for one intent, and the user asked for one action that resets all
+games). Reusing the per-game control's single-game operation three times (rejected: leaves a window
+where a failure mid-sequence clears some games and not others, and FR-057b is one action).
+
+---
+
+## R-025: A mistake rotates the clue card, and the abandoned entity stays in the pool
+
+**Decision**: A wrong click that does not end the game advances the card to another entity using the
+same eligibility rule the Next control already uses, and records nothing about the abandoned entity
+(FR-027c, FR-027d). Rotation draws from the served `clues` list, excludes the card being replaced and
+every card the visitor has already answered correctly, and the pool shrinks only when a card is
+answered correctly. When no other entity is eligible, the mistake is still counted and the same card
+keeps showing. The rotation is client-side and issues no request; the endpoint's miss response is
+unchanged, so no pairing is disclosed (FR-027a).
+
+**Rationale**: The user asked for the card to rotate on a mistake, which fixes a real dead end: without
+it a player re-clicks a clue they have just disproved and the rotation has no purpose. Two properties
+keep that change from costing anything. The abandoned entity stays in the pool, so a wrong guess
+costs the mistake and nothing else; three mistakes never retire three of the eighteen cards, and no
+entity becomes unreachable. And the rotation reuses the FR-026c predicate rather than introducing a
+second selection rule, so the Next control and the mistake cannot drift apart in what they consider
+eligible. The eighteen-card deck (R-019) is what makes this comfortable: with nine cards a run of
+mistakes could exhaust the pool, and FR-026d's continue-showing fallback would start appearing in
+normal play.
+
+**Alternatives considered**: Retiring the abandoned entity (rejected: a wrong guess would permanently
+remove a clue, so the player could never return to an entity they found hard, and the deck would
+shrink by up to three across a game). Advancing in stored deck order rather than choosing any
+eligible card (deferred: both satisfy FR-027c, and eligibility-based selection reuses the existing
+predicate; recorded as a plan-level choice in `/speckit.tasks`). Disclosing the correct series as
+feedback (rejected: FR-027a and SC-018 forbid it below the mistake limit, and it would let a player
+binary-search the answer with three lives). Ending the game on a mistake instead of rotating
+(rejected: the user specified a rotation, and the three-mistake limit is unchanged).
+
 ## R-004: Determinism and seeding
 
 **Decision**: The seed is `sha256("<game>:<puzzle_date>")` interpreted as a 64-bit integer, used to
@@ -164,7 +324,9 @@ refresh problem).
 covering the new one, Match the Series has no valid puzzle and shows the bilingual error state with
 retry (FR-050, EC-002). A verification task checks the real season labels in the catalog before the
 generators are finished, because a label mismatch would surface as a permanent error state rather
-than as wrong data.
+than as wrong data. The grid was reduced from nine by nine to three by three in clarification, so the
+coverage threshold is nine series rather than eighty-one; the catalog held 114 distinct series in
+fall 2026, so the error state is now a genuine catalog gap rather than an expected seasonal one.
 
 ---
 
@@ -202,21 +364,23 @@ require a hotlinked request to a third-party host, which SC-014 forbids).
 
 ---
 
-## R-009: Tile images without artwork
+## R-009: Clue card images without artwork
 
-**Decision**: Match the Series left tiles render the entity name as text plus a neutral placeholder
-mark drawn by the project's own CSS. No image file, no image URL, and no image request leaves the
-site.
+**Decision**: The Match the Series clue card renders the entity name as text plus a neutral
+placeholder mark drawn by the project's own CSS. No image file, no image URL, and no image request
+leaves the site. The nine grid tiles carry series titles as text only.
 
-**Rationale**: The user decided artwork arrives later and v1 uses a placeholder. The catalog does
-carry `image_url` on `characters`, `people`, and `anime`, so using it would have been the cheapest
-route to a prettier board, but SC-014 requires that no page request an image from any host other
-than the site's own, and FR-055 forbids hotlinking. A CSS placeholder satisfies the layout need
-without introducing an asset pipeline, a licensing question, or a third-party dependency.
+**Rationale**: The user chose artwork later and v1 uses a placeholder, and confirmed the choice for
+the clue card specifically. The catalog does carry `image_url` on `characters`, `people`, and
+`anime`, so using it would have been the cheapest route to a prettier board, but SC-014 requires that
+no page request an image from any host other than the site's own, and FR-055 forbids hotlinking. A
+CSS placeholder satisfies the layout need without introducing an asset pipeline, a licensing
+question, or a third-party dependency.
 
-**Alternatives considered**: Hotlinking `image_url` (rejected: violates FR-055 and SC-014; would
-require a constitution amendment). Committing placeholder image files (rejected: CSS is enough and
-avoids binary assets in v1).
+**Alternatives considered**: Hotlinking `image_url` (rejected by the user in clarification: violates
+FR-055 and SC-014, and would require a constitution amendment). Name-only with no image area
+(rejected: the card then carries no visual anchor above the grid). Committing placeholder image
+files (rejected: CSS is enough and avoids binary assets in v1).
 
 ---
 
@@ -265,8 +429,10 @@ voice actor, and person tiles are needed for variety).
 ## R-012: Invalid attempts and client trust
 
 **Decision**: An attempt is rejected as `INVALID_ATTEMPT` when its shape is wrong or any referenced
-id is not a member of the day's stored puzzle. Validation is membership in the stored puzzle only;
-the client is never trusted, and the server never looks up the catalog during attempt validation.
+id or key is not a member of the day's stored puzzle. Validation is membership in the stored puzzle
+only; the client is never trusted, and the server never looks up the catalog during attempt
+validation. For Match the Series this covers both the clue card key and the clicked series key
+(R-020).
 
 **Rationale**: FR-039 requires an attempt naming something outside the day's puzzle to be visibly
 rejected. Because the puzzle already contains only entities that existed in the catalog at
@@ -314,10 +480,11 @@ every request (unnecessary: the response already carries the date).
 
 **Decision**: Two versioned browser-storage entries. `animatch:v1:progress` holds the UTC date and a
 per-game record with status (`in_progress`, `won`, `lost`), the attempt count, and the minimal board
-state needed to resume (the current round index for More or Less, the matched and mistake counts for
-Match the Series, the consumed tiles and mistake count for Groups). Progress is written on every
-accepted answer, and an entry whose `date` differs from the browser's current UTC date is discarded
-on load. `animatch:v1:prefs` holds the language choice alone and is never discarded.
+state needed to resume (the current round index for More or Less, the green series keys, the answered
+clue card keys, the index of the clue card showing, and the mistake count for Match the Series, the
+consumed tiles and mistake count for Groups). Progress is written on every accepted answer, and an
+entry whose `date` differs from the browser's current UTC date is discarded on load.
+`animatch:v1:prefs` holds the language choice alone and is never discarded.
 
 **Rationale**: The user chose resume over restart. Resuming needs the in-progress state on the
 device, which Principle IV permits since nothing is stored server-side. Keying progress by date
@@ -326,7 +493,9 @@ a single field check instead of a per-game purge. Clearing or losing storage deg
 playable puzzle (FR-043b, FR-052). The language choice lives in its own entry because the clarified
 requirement makes it survive the rollover (FR-049b); a single shared blob would have reset the
 visitor's language every night at 00:00 UTC, which is why the storage is split rather than one
-versioned record.
+versioned record. Match the Series stores green tiles and answered cards rather than a puzzle board,
+so a tampered blob can at worst make the player look at their own screen wrongly, never change an
+answer (FR-039 is still enforced server-side against the stored puzzle).
 
 **Alternatives considered**: A separate storage key per game and date (rejected: unbounded key
 growth and a cleanup problem). Persisting the full puzzle board in storage (rejected: the board is
@@ -390,4 +559,6 @@ new dependency, plus its own tracking table, for one statement).
 ## Unresolved items
 
 None. All technical-context unknowns were resolved above, and no clarification marker remains in the
-spec.
+spec. The two 2026-10-05 clarification sessions added R-019 through R-025 and revised R-007, R-009,
+and R-015; every remaining question was either answered by the user or is implementation detail left
+to `/speckit.tasks`.

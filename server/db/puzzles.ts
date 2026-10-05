@@ -1,4 +1,4 @@
-import { getPool, withTransaction } from './pool'
+import { getPool, withDatabaseLogging, withTransaction } from './pool'
 import type { GameId } from '../game/ids'
 import type { PuzzleDate } from '../utils/day'
 import { sha256Hex } from '../utils/seed'
@@ -38,14 +38,16 @@ export async function getDailyPuzzle(
   game: GameId,
   puzzleDate: PuzzleDate,
 ): Promise<DailyPuzzleRow | null> {
-  const pool = getPool()
-  const { rows } = await pool.query<DailyPuzzleRow>(
-    `SELECT game, puzzle_date, payload, solution, created_at
-     FROM daily_puzzles
-     WHERE game = $1 AND puzzle_date = $2`,
-    [game, puzzleDate],
-  )
-  return rows[0] ?? null
+  return withDatabaseLogging(`daily_puzzles.read ${game} ${puzzleDate}`, async () => {
+    const pool = getPool()
+    const { rows } = await pool.query<DailyPuzzleRow>(
+      `SELECT game, puzzle_date, payload, solution, created_at
+       FROM daily_puzzles
+       WHERE game = $1 AND puzzle_date = $2`,
+      [game, puzzleDate],
+    )
+    return rows[0] ?? null
+  })
 }
 
 export async function readWithinTransaction(
@@ -83,21 +85,23 @@ export async function getOrCreateDailyPuzzle(
   puzzleDate: PuzzleDate,
   generate: (client: unknown) => Promise<{ payload: unknown; solution: unknown }>,
 ): Promise<DailyPuzzleRow> {
-  return withTransaction(getPool(), async (client) => {
-    const existing = await readWithinTransaction(client, game, puzzleDate)
-    if (existing) {
-      return existing
-    }
+  return withDatabaseLogging(`daily_puzzles.read_or_create ${game} ${puzzleDate}`, () =>
+    withTransaction(getPool(), async (client) => {
+      const existing = await readWithinTransaction(client, game, puzzleDate)
+      if (existing) {
+        return existing
+      }
 
-    const generated = await generate(client)
-    await insertWithinTransaction(client, game, puzzleDate, generated.payload, generated.solution)
+      const generated = await generate(client)
+      await insertWithinTransaction(client, game, puzzleDate, generated.payload, generated.solution)
 
-    const winner = await readWithinTransaction(client, game, puzzleDate)
-    if (!winner) {
-      throw new Error('daily_puzzles row missing after insert')
-    }
-    return winner
-  })
+      const winner = await readWithinTransaction(client, game, puzzleDate)
+      if (!winner) {
+        throw new Error('daily_puzzles row missing after insert')
+      }
+      return winner
+    }),
+  )
 }
 
 export function computePuzzleSignature(game: GameId, puzzleDate: PuzzleDate): string {

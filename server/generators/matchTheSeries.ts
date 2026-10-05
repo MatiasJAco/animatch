@@ -9,11 +9,12 @@ import { createPrngFromSeed } from '../utils/seed'
 import { shuffle } from '../utils/shuffle'
 import {
   MATCH_BOARD_SIZE,
+  MATCH_CLUE_COUNT,
   MATCH_WRONG_LIMIT,
+  type MatchTheSeriesClue,
   type MatchTheSeriesPayloadData,
-  type MatchTheSeriesSolution,
-  type MatchTheSeriesTile,
   type MatchTheSeriesSeries,
+  type MatchTheSeriesSolution,
 } from '../game/matchTheSeries'
 
 const NOVELTY_WINDOW_DAYS = 30
@@ -21,11 +22,11 @@ const MAX_NOVELTY_RETRIES = 8
 
 // EC-003 / R-006: the setup signature must differ from the previous thirty days.
 export function contentSignature(
-  tiles: ReadonlyArray<{ kind: string; id: number }>,
+  clues: ReadonlyArray<{ key: string }>,
   seriesKeys: readonly string[],
 ): string {
   return sha256Hex(
-    [...tiles.map((t) => `${t.kind}:${t.id}`), ...seriesKeys].sort().join('|'),
+    [...clues.map((c) => c.key), ...seriesKeys].sort().join('|'),
   )
 }
 
@@ -57,40 +58,56 @@ export class PuzzleUnavailableError extends Error {
   readonly code = 'PUZZLE_UNAVAILABLE' as const
 }
 
-// Tiles must be characters or people who appear in exactly one anime of the current season set.
-export function buildMatchTiles(
-  seriesSet: Set<number>,
+interface ClueCandidate {
+  kind: 'character' | 'person'
+  id: number
+  name: string
+  animeId: number
+}
+
+export interface MatchDeck {
+  clues: MatchTheSeriesClue[]
+  answers: Record<string, string>
+}
+
+/**
+ * FR-024a / FR-029a: an entity is usable only when its anime *within the given series set*
+ * is exactly one, so the answer is a function of the card and never a choice between series.
+ * Returns the usable candidates grouped by the one anime they belong to.
+ */
+export function indexClueCandidates(
+  seriesIds: readonly number[],
   roles: Array<{ character_mal_id: number | null; person_mal_id: number | null; anime_mal_id: number }>,
   characters: Map<number, string>,
   people: Map<number, string>,
-  prng: () => number,
-): Array<{ kind: 'character' | 'person'; id: number; name: string; animeId: number }> {
-  // How many puzzles from the chosen set each entity appears in. Only entities with exactly one
-  // are usable, so the pairing stays a function (data-model §5, step 3).
+): Map<number, ClueCandidate[]> {
+  const inSet = new Set(seriesIds)
+
+  // How many of the given series each entity appears in.
   const charSeries = new Map<number, Set<number>>()
   const personSeries = new Map<number, Set<number>>()
   const charAnime = new Map<number, number>()
   const personAnime = new Map<number, number>()
 
-  for (const r of roles) {
-    if (!seriesSet.has(r.anime_mal_id)) {
+  for (const role of roles) {
+    if (!inSet.has(role.anime_mal_id)) {
       continue
     }
-    if (r.character_mal_id) {
-      const set = charSeries.get(r.character_mal_id) ?? new Set<number>()
-      set.add(r.anime_mal_id)
-      charSeries.set(r.character_mal_id, set)
-      charAnime.set(r.character_mal_id, r.anime_mal_id)
+    if (role.character_mal_id) {
+      const set = charSeries.get(role.character_mal_id) ?? new Set<number>()
+      set.add(role.anime_mal_id)
+      charSeries.set(role.character_mal_id, set)
+      charAnime.set(role.character_mal_id, role.anime_mal_id)
     }
-    if (r.person_mal_id) {
-      const set = personSeries.get(r.person_mal_id) ?? new Set<number>()
-      set.add(r.anime_mal_id)
-      personSeries.set(r.person_mal_id, set)
-      personAnime.set(r.person_mal_id, r.anime_mal_id)
+    if (role.person_mal_id) {
+      const set = personSeries.get(role.person_mal_id) ?? new Set<number>()
+      set.add(role.anime_mal_id)
+      personSeries.set(role.person_mal_id, set)
+      personAnime.set(role.person_mal_id, role.anime_mal_id)
     }
   }
 
-  const byAnime = new Map<number, Array<{ kind: 'character' | 'person'; id: number; name: string; animeId: number }>>()
+  const byAnime = new Map<number, ClueCandidate[]>()
   for (const [charId, animes] of charSeries) {
     const name = characters.get(charId)
     if (animes.size === 1 && name) {
@@ -111,42 +128,61 @@ export function buildMatchTiles(
       ])
     }
   }
+  return byAnime
+}
 
-  // One tile per series keeps the board solvable: every series on the right grid has a partner.
-  const eligible = [...byAnime.entries()].filter(([, list]) => list.length > 0)
-  if (eligible.length < MATCH_BOARD_SIZE) {
-    return []
+const CLUES_PER_SERIES = MATCH_CLUE_COUNT / MATCH_BOARD_SIZE
+
+/**
+ * R-019: two cards per series, preferring one character and one person, filling from
+ * whichever kind the season offers. FR-030: a series that cannot supply its cards makes the
+ * day unavailable rather than serving a thin deck. R-021: the deck order is independent of
+ * the grid order, so no card's answer is readable from its position.
+ */
+export function buildMatchDeck(
+  chosenAnimeIds: readonly number[],
+  byAnime: Map<number, ClueCandidate[]>,
+  prng: () => number,
+): MatchDeck {
+  for (const animeId of chosenAnimeIds) {
+    if ((byAnime.get(animeId) ?? []).length < CLUES_PER_SERIES) {
+      return { clues: [], answers: {} }
+    }
   }
 
-  const charAnimes = eligible.filter(([, list]) => list.some((c) => c.kind === 'character'))
-  const personAnimes = eligible.filter(([, list]) => list.some((c) => c.kind === 'person'))
+  const clues: MatchTheSeriesClue[] = []
+  const answers: Record<string, string> = {}
 
-  // Data-model step 4 asks for a mix of both kinds. Take half from each when the season
-  // allows it, otherwise fill the rest from whichever kind is available.
-  const targetCharacters = Math.min(charAnimes.length, Math.ceil(MATCH_BOARD_SIZE / 2))
-  const targetPeople = Math.min(personAnimes.length, MATCH_BOARD_SIZE - targetCharacters)
-  const chosen = [
-    ...shuffle(charAnimes, prng).slice(0, targetCharacters),
-    ...shuffle(personAnimes, prng).slice(0, targetPeople),
-  ]
-  const filler = shuffle(
-    eligible.filter(([animeId]) => !chosen.some(([id]) => id === animeId)),
-    prng,
-  ).slice(0, MATCH_BOARD_SIZE - chosen.length)
-  chosen.push(...filler)
+  for (const animeId of chosenAnimeIds) {
+    const candidates = byAnime.get(animeId) as ClueCandidate[]
+    const charactersPool = shuffle(
+      candidates.filter((c) => c.kind === 'character'),
+      prng,
+    )
+    const peoplePool = shuffle(
+      candidates.filter((c) => c.kind === 'person'),
+      prng,
+    )
 
-  const tiles: Array<{ kind: 'character' | 'person'; id: number; name: string; animeId: number }> = []
-  for (const [, candidates] of chosen) {
-    const wanted =
-      chosen.filter(([, list]) => list.some((c) => c.kind === 'person')).length > 0 &&
-      Math.floor(prng() * 2) === 0
-        ? 'person'
-        : 'character'
-    const pool = candidates.filter((c) => c.kind === wanted)
-    tiles.push(pool.length > 0 ? pool[Math.floor(prng() * pool.length)] : candidates[0])
+    const picked: ClueCandidate[] = []
+    if (charactersPool.length > 0) picked.push(charactersPool.shift() as ClueCandidate)
+    if (peoplePool.length > 0) picked.push(peoplePool.shift() as ClueCandidate)
+    const rest = shuffle([...charactersPool, ...peoplePool], prng)
+    while (picked.length < CLUES_PER_SERIES && rest.length > 0) {
+      picked.push(rest.shift() as ClueCandidate)
+    }
+    if (picked.length < CLUES_PER_SERIES) {
+      return { clues: [], answers: {} }
+    }
+
+    for (const candidate of picked) {
+      const key = candidate.kind === 'character' ? `c:${candidate.id}` : `p:${candidate.id}`
+      clues.push({ key, kind: candidate.kind, name: candidate.name })
+      answers[key] = `a:${animeId}`
+    }
   }
 
-  return shuffle(tiles, prng)
+  return { clues: shuffle(clues, prng), answers }
 }
 
 export async function generateMatchTheSeries(
@@ -162,77 +198,75 @@ export async function generateMatchTheSeries(
     seasonInfo.year,
     seasonInfo.season,
   )
+  // FR-030: nine distinct current-season series. The grid is never shrunk and no older
+  // season is substituted; the caller shows the bilingual error state instead.
   if (series.length < MATCH_BOARD_SIZE) {
     throw new PuzzleUnavailableError('not enough current-season series for match-the-series')
   }
-  const seriesSet = new Set(series.map((s) => s.anime_mal_id))
   const charMap = new Map(characters.map((c) => [c.mal_id, c.name]))
   const peopleMap = new Map(people.map((p) => [p.mal_id, p.name]))
+
+  // FR-024a: index the candidates over the whole season so a series that cannot supply
+  // its cards is never chosen. This is stricter than the chosen-nine rule, so every card
+  // kept below is also unambiguous within the nine that end up on the board.
+  const byAnime = indexClueCandidates(
+    series.map((s) => s.anime_mal_id),
+    roles,
+    charMap,
+    peopleMap,
+  )
+  const eligible = series.filter(
+    (s) => (byAnime.get(s.anime_mal_id) ?? []).length >= CLUES_PER_SERIES,
+  )
+  if (eligible.length < MATCH_BOARD_SIZE) {
+    throw new PuzzleUnavailableError(
+      'not enough current-season series with single-series characters or people',
+    )
+  }
 
   const recent = await fetchRecentSignatures(game, puzzleDate)
   const daySeed = computePuzzleSignature(game, puzzleDate)
 
   for (let attempt = 0; attempt < MAX_NOVELTY_RETRIES; attempt += 1) {
     const prng = createPrngFromSeed(attempt === 0 ? daySeed : sha256Hex(`${daySeed}:${attempt}`))
-    const selectedTiles = buildMatchTiles(seriesSet, roles, charMap, peopleMap, prng)
-    if (selectedTiles.length < MATCH_BOARD_SIZE) {
-      throw new PuzzleUnavailableError('not enough unique left tiles in current season')
+
+    const chosenSeries = shuffle(eligible, prng).slice(0, MATCH_BOARD_SIZE)
+    const chosenAnimeIds = chosenSeries.map((s) => s.anime_mal_id)
+
+    const deck = buildMatchDeck(chosenAnimeIds, byAnime, prng)
+    if (deck.clues.length !== MATCH_CLUE_COUNT) {
+      continue
     }
-
-    // The right grid holds the series the tiles actually came from, so every tile has
-    // exactly one partner and every tile is answerable (FR-030, R-007).
-    const titlesByAnime = new Map(series.map((s) => [s.anime_mal_id, s.title]))
-    const pickedSeries = selectedTiles.map((tile) => ({
-      anime_mal_id: tile.animeId,
-      title: titlesByAnime.get(tile.animeId) as string,
-    }))
-
-    const tileList: MatchTheSeriesTile[] = selectedTiles.map((t) => ({
-      key: t.kind === 'character' ? `c:${t.id}` : `p:${t.id}`,
-      kind: t.kind,
-      name: t.name,
-    }))
-    const seriesList: MatchTheSeriesSeries[] = pickedSeries.map((s) => ({
-      key: `a:${s.anime_mal_id}`,
-      title: s.title,
-    }))
-
-    // The anime id is the answer and never appears in the payload.
-    const answers: Record<string, string> = {}
-    for (let i = 0; i < selectedTiles.length; i += 1) {
-      answers[tileList[i].key] = `a:${selectedTiles[i].animeId}`
-    }
-    if (Object.keys(answers).length !== MATCH_BOARD_SIZE) {
+    if (new Set(deck.clues.map((c) => c.key)).size !== MATCH_CLUE_COUNT) {
       continue
     }
 
     const sig = contentSignature(
-      selectedTiles,
-      seriesList.map((s) => s.key),
+      deck.clues,
+      chosenAnimeIds.map((id) => `a:${id}`),
     )
     if (recent.has(sig)) continue
 
-    // Data-model step 5: the right grid is shuffled independently, and its order must differ
-    // from the left grid, so no pairing can be read off by position.
-    let orderedSeries = shuffle(seriesList, prng)
-    for (let tries = 0; tries < 10; tries += 1) {
-      if (!orderedSeries.some((series, index) => answers[tileList[index].key] === series.key)) {
-        break
-      }
-      orderedSeries = shuffle(seriesList, prng)
-    }
+    const titlesByAnime = new Map(series.map((s) => [s.anime_mal_id, s.title]))
+    const gridSeries: MatchTheSeriesSeries[] = shuffle(
+      chosenAnimeIds.map((animeId) => ({
+        key: `a:${animeId}`,
+        title: titlesByAnime.get(animeId) as string,
+      })),
+      prng,
+    )
 
     const payloadData: MatchTheSeriesPayloadData = {
       game,
       date: puzzleDate,
       season: { season: seasonInfo.season, year: seasonInfo.year },
-      tiles: tileList,
-      series: orderedSeries,
+      grid: { rows: 3, cols: 3, series: gridSeries },
+      clues: deck.clues,
       wrongLimit: MATCH_WRONG_LIMIT,
     }
     return {
       payload: { signature: sig, data: payloadData },
-      solution: { answers },
+      solution: { answers: deck.answers },
     }
   }
   throw new PuzzleUnavailableError('could not find a novel match-the-series setup')

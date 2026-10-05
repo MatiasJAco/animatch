@@ -164,24 +164,32 @@ in_progress ──miss──────► lost
 
 ## 5. Match the Series
 
-**Concept**: two grids of 16. Left tiles are characters or people from the current season; right
-tiles are 16 series titles from the current season in a different order.
+**Concept**: one three-by-three grid of nine current-season series titles, and a clue deck of eighteen
+cards shown one at a time above the grid. Each card is a character or a voice actor belonging to
+exactly one of the nine grid series. The visitor clicks the series the card belongs to; a correct
+click colors that tile green and loads the next card; three wrong clicks end the game (FR-024 to
+FR-029a, R-019).
 
 **Generation**
 
 1. Derive the current season from the UTC date: month → season name, year = calendar year (R-007).
 2. Current-season series:
    `SELECT a.mal_id, a.title FROM anime_seasons s JOIN anime a ON a.mal_id = s.anime_mal_id WHERE lower(trim(s.season)) = $1 AND s.year = $2 ORDER BY a.mal_id`
-   Fewer than 16 distinct titles ⇒ `PUZZLE_UNAVAILABLE` (FR-030, EC-002).
-3. Left candidates from that series set:
-   - Character tiles: a `characters` row whose only series **within the set** is one anime, so the
-     pairing is a function. Characters appearing in two or more set series are excluded, since they
-     would have two correct answers.
-   - Person tiles: a `people` row with roles in exactly one anime of the set, same reasoning.
+   Fewer than 9 distinct titles ⇒ `PUZZLE_UNAVAILABLE` (FR-030, EC-002). The grid is never shrunk
+   and no older season is substituted.
+3. Pick 9 series from the set with the seeded PRNG.
+4. Clue candidates, restricted to the chosen 9 series:
+   - Character cards: a `characters` row whose only series **within the chosen set** is one anime,
+     so the answer is a function. Characters appearing in two or more chosen series are excluded,
+     since they would have more than one correct answer (FR-024a, FR-029a).
+   - Person cards: a `people` row with roles in exactly one anime of the chosen set, same reasoning.
    Both come from `voice_roles` restricted to the set, `ORDER BY` primary key.
-4. Choose 16 tiles deterministically, mixing character and person tiles, all ids distinct.
-5. Shuffle the right grid independently so its order differs from the left grid.
-6. Novelty signature check (R-006).
+5. Choose 18 cards: two per grid series, preferring one character and one person per series and
+   filling from whichever kind exists. Every grid series therefore has at least one answerable card.
+6. Shuffle the grid into board order and shuffle the deck independently, so no card's series is
+   readable from position (R-019, R-021).
+7. Novelty signature check (R-006). Below 9 series, or below 2 cards for any chosen series, the day
+   is `PUZZLE_UNAVAILABLE` rather than a thin board.
 
 **Stored `payload.data`**
 
@@ -190,19 +198,26 @@ tiles are 16 series titles from the current season in a different order.
   "game": "match_the_series",
   "date": "2026-10-02",
   "season": { "season": "fall", "year": 2026 },
-  "tiles": [
-    { "key": "c:12345", "kind": "character", "name": "..." },
-    { "key": "p:678",   "kind": "person",    "name": "..." }
-  ],
-  "series": [
-    { "key": "a:9001", "title": "..." }
+  "grid": {
+    "rows": 3,
+    "cols": 3,
+    "series": [
+      { "key": "a:9001", "title": "Series One" },
+      { "key": "a:9102", "title": "Series Two" }
+    ]
+  },
+  "clues": [
+    { "key": "c:12345", "kind": "character", "name": "Character A" },
+    { "key": "p:678",   "kind": "person",    "name": "Person D" }
   ],
   "wrongLimit": 3
 }
 ```
 
-Tile keys are prefixed by kind so a character and a person can never collide. No `image_url`, no
-placeholder URL, no anime id on the left tiles: the anime id **is** the answer.
+`clues` has 18 entries in served order. `grid.series` has 9. Grid keys are the anime identity and
+the title is the only fact shown on a tile; clue cards show the name plus a neutral CSS placeholder
+(FR-029, R-009). No `image_url`, no placeholder URL, and **no clue card carries its series key** —
+that mapping is the answer and lives only in the solution.
 
 **Stored `solution`**
 
@@ -210,34 +225,59 @@ placeholder URL, no anime id on the left tiles: the anime id **is** the answer.
 { "answers": { "c:12345": "a:9001", "p:678": "a:9102" } }
 ```
 
+Keyed by clue card key. Two cards may map to the same series key, which is what makes a second
+correct route to every tile available (R-019).
+
 **Attempt**
 
 ```
-POST /api/daily/match_the_series/attempt  { "tileKey": "c:12345", "seriesKey": "a:9001" }
+POST /api/daily/match_the_series/attempt  { "clueKey": "c:12345", "seriesKey": "a:9001" }
 ```
 
-Both keys must exist in the payload; anything else is `INVALID_ATTEMPT` (FR-039).
+Both keys must exist in the stored puzzle; anything else is `INVALID_ATTEMPT` (FR-039, R-020). The
+Next control never calls this endpoint (FR-026b, R-021).
 
 Outcome disclosure is deliberately asymmetric:
 
 | Situation | Response carries |
 |-----------|------------------|
-| Correct pair | hit; the two keys lock client-side |
-| Wrong pair, mistake limit not reached | miss; **no** `correctSeriesKey`, no other pairing, both tiles returned to unselected (FR-027a) |
-| Wrong pair that ends the game | miss; `correctSeriesKey` for that tile, plus the full solution so every pairing can be revealed (FR-027) |
+| Correct click | hit; the client colors that series key green and moves to the next unanswered card (FR-026, FR-026a) |
+| Wrong click, mistake limit not reached | miss; **no** `correctSeriesKey` and no other pairing; the tile stays uncolored. The client rotates the card to another entity and keeps the abandoned one eligible (FR-027a, FR-027c, FR-027d) |
+| Wrong click that ends the game | miss; `correctSeriesKey` for that card, plus the full `answers` map so every green tile's pairing can be revealed (FR-027). No rotation happens |
 
-The server returns no attempt count; the client counts answers itself (FR-041, R-012).
+The server returns no attempt count; the client counts answers itself, and a Next press is not an
+answer (FR-041, FR-026b). The rotation is likewise client-side and issues no request, which is what
+keeps the miss response free of any disclosure and leaves the endpoint unchanged by R-025.
 
-**State transitions**
+**Pool eligibility, shared by Next and by mistake rotation.** One predicate governs both, so the two
+cannot drift (FR-026c, FR-027c, R-025):
+
+```ts
+// candidate pool: served clues, minus the card on screen, minus every card answered correctly
+// rotation = any element of the pool; falls back to the current card when the pool is empty
+```
+
+`answeredClues` is therefore the only removal from the pool. A mistake never adds to it, so the
+abandoned entity stays eligible and can be shown again by a later rotation or by Next (FR-027d). With
+eighteen cards and nine series, at most two rotations are ever needed to keep a card available before
+the pool empties, and the fallback in FR-026d covers the empty case rather than ending play.
+
+**Attempt-count consequence.** A mistake is still an answer, so `attempts` increases exactly as
+before; only which card is on screen changes (FR-041, FR-027c).
+
+**State transitions** (client-side; the server holds none)
 
 ```
-fresh ──attempt──► in_progress(matched | misses, attempts+1)
-in_progress ──hit───► in_progress | won(all 16 matched)
-in_progress ──miss──► in_progress | lost(misses == 3)
+fresh ──click──► in_progress(green | answered | mistakes, attempts+1)
+in_progress ──hit────► in_progress | won(green == 9)
+in_progress ──miss───► in_progress(clueIndex advanced, answered unchanged) | lost(mistakes == 3)
+in_progress ──next───► in_progress, counters unchanged
 ```
 
-Matched pairs stay visible as locked; the correct pairing is only revealed after the game ends, so
-a wrong answer cannot leak other pairs.
+Green tiles stay visible as locked; the correct pairing is only revealed after the game ends, so a
+wrong click cannot leak another pairing (FR-027a, SC-018). The `miss` transition advances
+`clueIndex` but leaves `answeredClues` untouched, which is the whole of FR-027d in state terms: the
+abandoned card is still in the pool.
 
 ---
 
@@ -383,8 +423,10 @@ type LocalGameState = {
   status: 'in_progress' | 'won' | 'lost'
   attempts: number                  // every answer given, correct or wrong (FR-041)
   round?: number                    // more_or_less: next round index
-  matched?: string[]                // match_the_series: locked series keys
-  wrongPairs?: number               // match_the_series: wrong pairs so far
+  greenSeries?: string[]            // match_the_series: grid tiles already green
+  answeredClues?: string[]          // match_the_series: clue cards already answered correctly
+  clueIndex?: number                // match_the_series: index of the clue card on screen
+  wrongClicks?: number              // match_the_series: wrong clicks so far
   found?: string[]                  // groups: consumed tile keys
   mistakes?: number                 // groups: mistakes so far
   endedAt?: string                  // ISO, UTC
@@ -403,11 +445,24 @@ Rules:
 - Cleared, missing, or unreadable storage yields a fresh playable game with zero attempts and no
   error (FR-043b, FR-052).
 - `attempts` counts every answer that was accepted, correct or wrong, and never an attempt rejected
-  as invalid, since a rejection changes no state (FR-041). Consequence per game: a won More or Less
-  is always 10, a lost one is between 1 and 10; a lost Match the Series is between 4 and 19; a lost
-  Groups is between 6 and 9.
+  as invalid, since a rejection changes no state (FR-041). It also never counts a Next press, which
+  is a free skip and not an answer (FR-026b). Consequence per game: a won More or Less is always 10,
+  a lost one is between 1 and 10; a won Match the Series is between 9 and 11 and a lost one between
+  3 and 11, because three wrong clicks end the game and at most eight tiles can be green before the
+  ninth would have won; a lost Groups is between 6 and 9.
 - Reading and writing are wrapped in one module with a version guard, so a future shape change
   discards rather than misreads old state.
+- **Per-game reset** (FR-057): one exported operation removes a single game's entry and leaves every
+  other game, the entry's `date`, and the language preference untouched. It performs no network call
+  and no server write (FR-058). The composable also exposes the exact operation the debug control
+  invokes, so the control holds no logic of its own.
+- **Reset all games** (FR-057b): a second exported operation removes all three game entries in one
+  write of the progress blob. It performs no network call and never reads, writes, or deletes a
+  `daily_puzzles` row (FR-057c, R-024), and it leaves `animatch:v1:prefs` untouched so the language
+  choice survives (FR-049b). One write rather than three is what makes it atomic from the visitor's
+  point of view: there is no state in which some games are cleared and others are not.
+- Both reset operations are rendered only in a development build (FR-057a, FR-057c, R-022, R-024), so
+  a production bundle contains no way to reach either from the page.
 
 ### 8.2 Preferences: `animatch:v1:prefs`
 
@@ -437,14 +492,25 @@ Rules:
 | Attempt references an id or key not in the stored puzzle | 400 `INVALID_ATTEMPT` (FR-039) |
 | Attempt body malformed or wrong field types | 400 `INVALID_ATTEMPT` |
 | Round index outside 0..9 | 400 `INVALID_ATTEMPT` |
+| Match the Series attempt missing `clueKey` or `seriesKey` | 400 `INVALID_ATTEMPT` (FR-025, R-020) |
 | Group submission not exactly 4 keys, or a consumed key | 400 `INVALID_ATTEMPT` |
 | Catalog unreachable | 503 `DATABASE_UNAVAILABLE`, logged server-side (Principle V) |
 | No valid puzzle possible today | 503 `PUZZLE_UNAVAILABLE`, no row inserted |
 | No solution data in any GET response | Payload split (R-010); asserted by test |
-| Wrong pairing below the mistake limit reveals nothing | `correctSeriesKey` omitted unless the game ended (FR-027a) |
+| No clue card in any payload carries its series key | The `answers` map lives only in `solution` (FR-024a) |
+| Wrong click below the mistake limit reveals nothing | `correctSeriesKey` and `answers` omitted unless the game ended (FR-027a) |
+| Next never reaches the server | No endpoint consumes it; the client only advances its own index (FR-026b, R-021) |
+| A mistake rotates the card without a request | Same client-side advance as Next; the miss response is unchanged (FR-027c, R-025) |
+| A rotated-away entity is never retired | `answeredClues` is only appended on a correct answer (FR-027d) |
+| Rotation can never leave the player without a card | Empty pool falls back to the current card instead of ending play (FR-026d) |
+| Clicking an already-green tile changes nothing | The client ignores the click; the server has no such input (FR-027b) |
 | Groups miss discloses only the overlap count | `overlap` integer only; solution never sent on a miss (FR-035a) |
 | Invalid attempts never count toward the attempt count | Rejected before any counter is written; counters live client-side (FR-041) |
 | Language choice survives the 00:00 UTC rollover | Separate non-date-scoped storage entry (§8.2) |
+| Reset touches device state only | One storage operation, no fetch, no server write (FR-058, R-022) |
+| Home reset clears all three games at once | One write of the progress blob; `prefs` untouched, so the language survives (FR-057b, FR-057c, R-024) |
+| Neither reset can change a stored puzzle | No route is added, so no code path from a page reaches `daily_puzzles` (FR-057c, FR-058) |
+| Reset is unreachable in production | Rendered only under the development build flag (FR-057a, FR-057c) |
 
 ---
 

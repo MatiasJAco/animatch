@@ -49,7 +49,17 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
 
     expect(payload.game).toBe('more_or_less')
     expect(payload.date).toBe(moreOrLessDate)
-    expect(payload.chain.length).toBeGreaterThan(0)
+    // FR-017: ten rounds, so eleven links after the opening pair and twelve actors.
+    expect(payload.rounds).toBe(10)
+    expect(payload.chain.length).toBe(11)
+    expect(payload.initialVisible.roleCount).toBeTypeOf('number')
+    // FR-016a: only the left actor's count is given; every later count is withheld.
+    const servedNames = [payload.initialVisible.name, ...payload.chain.map((link) => link.name)]
+    const servedKeys = [payload.initialVisible.id, ...payload.chain.map((link) => link.id)]
+    expect(new Set(servedNames).size).toBe(12)
+    expect(new Set(servedKeys).size).toBe(12)
+    const countsInPayload = JSON.stringify(payload).match(/"roleCount":/g) ?? []
+    expect(countsInPayload.length).toBe(1)
     expect((row.payload as { signature?: string }).signature).toBeTypeOf('string')
 
     // FR-012 / R-009: no solution and no external media reach the client.
@@ -59,7 +69,7 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
     expect((await getDailyPuzzle('more_or_less', moreOrLessDate))?.solution).toBeTypeOf('object')
   })
 
-  it('serves a solvable 16x16 match_the_series payload without solution or image URLs', async () => {
+  it('serves a 3x3 match_the_series grid plus a clue deck with no series key on any card', async () => {
     let payload: MatchTheSeriesPayloadData
     let solution: MatchTheSeriesSolution
     try {
@@ -80,35 +90,47 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
 
     expect(payload.game).toBe('match_the_series')
     expect(payload.date).toBe(matchDate)
-    expect(payload.tiles).toHaveLength(16)
-    expect(payload.series).toHaveLength(16)
-    expect(payload.wrongLimit).toBe(3)
     expect(payload.season.year).toBeGreaterThan(1950)
+
+    // FR-024: exactly one grid of three by three.
+    expect(payload.grid.rows).toBe(3)
+    expect(payload.grid.cols).toBe(3)
+    expect(payload.grid.series).toHaveLength(9)
+    expect(payload.wrongLimit).toBe(3)
+
+    // FR-024: nine distinct series titles, so no tile is ambiguous.
+    expect(new Set(payload.grid.series.map((s) => s.key)).size).toBe(9)
+    expect(new Set(payload.grid.series.map((s) => s.title)).size).toBe(9)
+
+    // R-019: the deck is eighteen cards, two per series, so every tile has two routes.
+    expect(payload.clues).toHaveLength(18)
+    expect(new Set(payload.clues.map((c) => c.key)).size).toBe(18)
+    const perSeries = new Map<string, number>()
+    for (const [clueKey, seriesKey] of Object.entries(solution.answers)) {
+      perSeries.set(seriesKey, (perSeries.get(seriesKey) ?? 0) + 1)
+      // FR-024a: the answer is a function of the card, never a choice between series.
+      expect(clueKey).toBeTypeOf('string')
+    }
+    expect([...perSeries.values()].sort()).toEqual(new Array(9).fill(2))
+    expect(Object.keys(solution.answers)).toHaveLength(18)
+    for (const seriesKey of perSeries.keys()) {
+      expect(payload.grid.series.some((s) => s.key === seriesKey)).toBe(true)
+    }
+
+    // FR-024a: no card carries its own answer.
+    for (const clue of payload.clues) {
+      expect(Object.keys(clue).sort()).toEqual(['key', 'kind', 'name'])
+      expect(solution.answers[clue.key]).toBeTypeOf('string')
+    }
+    // FR-029: the card shows a name plus a project placeholder, never an image URL.
+    expect(new Set(payload.clues.map((clue) => clue.kind))).toEqual(
+      new Set(['character', 'person']),
+    )
 
     const served = JSON.stringify(payload)
     expect(served).not.toContain('solution')
+    expect(served).not.toContain('image_url')
     expect(served).not.toMatch(/https?:\/\//)
-
-    // FR-030: unique keys on both grids, and every tile has exactly one partner, so the
-    // board is solvable and no answer is ambiguous.
-    expect(new Set(payload.tiles.map((t) => t.key)).size).toBe(16)
-    expect(new Set(payload.series.map((s) => s.key)).size).toBe(16)
-    expect(Object.keys(solution.answers)).toHaveLength(16)
-    for (const tile of payload.tiles) {
-      const target = solution.answers[tile.key]
-      expect(target).toBeTypeOf('string')
-      expect(payload.series.some((s) => s.key === target)).toBe(true)
-    }
-    // The pairing is one-to-one: no series is the answer twice.
-    expect(new Set(Object.values(solution.answers)).size).toBe(16)
-
-    // Data-model steps 4 and 5: both tile kinds appear, and the right grid is ordered
-    // differently from the left, so no pairing can be read off by position.
-    expect(new Set(payload.tiles.map((tile) => tile.kind))).toEqual(
-      new Set(['character', 'person']),
-    )
-    const leftAnswers = payload.tiles.map((tile) => solution.answers[tile.key])
-    expect(leftAnswers.some((answer, index) => answer === payload.series[index]?.key)).toBe(false)
   })
 
   it('serves sixteen distinct groups tiles with no criterion field', async () => {

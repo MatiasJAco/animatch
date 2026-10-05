@@ -41,6 +41,15 @@ npm run dev
 One process serves the pages and the API. The browser never talks to the database: puzzle and
 catalog data reach it as JSON from this app's own endpoints.
 
+### Development-only reset
+
+Every game screen shows a control back to the home page, plus a **Reset** button that only exists
+in a development build. It clears that one game's saved state for the current UTC day in your own
+browser storage, so you can replay today's puzzle without a reload. It makes no request and writes
+nothing on the server, which is why it cannot change the puzzle anyone else is given, and why it is
+absent from `npm run build` output. To discard a puzzle the *server* already stored, delete its
+`daily_puzzles` row yourself; see [tasks.md](specs/001-daily-anime-puzzles/tasks.md).
+
 ## Test
 
 ```bash

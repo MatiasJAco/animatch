@@ -27,6 +27,7 @@ const handleOutcome = (
     attempts: number
     mistakes: number
     found: Array<{ keys: string[]; criterion: GroupCriterion }>
+    missLog: string[][]
   },
 ) => {
   lastOutcome.value = outcome
@@ -36,13 +37,15 @@ const handleOutcome = (
     return
   }
 
-  // FR-043a: only the visitor's own progress is stored, never puzzle content.
+  // FR-043a: only the visitor's own progress is stored, never puzzle content. The rejected
+  // proposals are stored too, so a resumed board stays verifiable by the server.
   progress.setGameState('groups', {
     status: 'in_progress',
     attempts: outcome.attempts,
     mistakes: outcome.mistakes,
     found: outcome.found.flatMap((group) => group.keys),
     foundGroups: outcome.found,
+    missLog: outcome.missLog,
   })
 }
 </script>
@@ -54,6 +57,7 @@ const handleOutcome = (
         <h1>{{ t('game.groups') }}</h1>
         <p class="muted">{{ t('game.groups.help') }}</p>
       </div>
+      <GameHeaderControls game="groups" />
     </header>
 
     <ErrorPanel
@@ -77,6 +81,7 @@ const handleOutcome = (
       :initial-mistakes="gameState?.mistakes ?? 0"
       :initial-attempts="gameState?.attempts ?? 0"
       :initial-found="(gameState?.foundGroups as never) ?? []"
+      :initial-miss-log="gameState?.missLog ?? []"
       @outcome="handleOutcome"
     />
   </main>

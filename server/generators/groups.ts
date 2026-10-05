@@ -1,4 +1,5 @@
 import {
+  fetchAnimeSeasonById,
   fetchSameAnimePools,
   fetchSameLanguagePools,
   fetchSameSeasonPool,
@@ -204,11 +205,9 @@ export async function generateGroups(
     // Every candidate tile must have a season identity so same_season can be judged on the board.
     for (const tile of boardTiles) {
       if (!seasonMap.has(tile.animeId)) {
-        const row = await getPool().query<{ year: number; season: string }>(
-          `SELECT year, season FROM anime_seasons WHERE anime_mal_id = $1 ORDER BY year LIMIT 1`,
-          [tile.animeId],
-        )
-        const found = row.rows[0]
+        // Principle I: the catalog module owns every catalog read, so this calls the
+        // catalog query instead of issuing SQL of its own.
+        const found = await fetchAnimeSeasonById(tile.animeId)
         if (found) {
           seasonMap.set(tile.animeId, { season: found.season, year: found.year })
         }

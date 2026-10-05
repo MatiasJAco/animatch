@@ -42,6 +42,7 @@ const finished = computed(() => gameState.value?.status === 'won' || gameState.v
         <h1>{{ t('game.more_or_less') }}</h1>
         <p class="muted">{{ t('game.more_or_less.help') }}</p>
       </div>
+      <GameHeaderControls game="more_or_less" />
     </header>
 
     <ErrorPanel

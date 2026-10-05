@@ -48,6 +48,7 @@ const stateFor = (game: GameId) => progress.getGameState(game)
     />
     <template v-else-if="listing">
       <h2>{{ t('home.pick_game') }}</h2>
+      <HomeResetControls />
       <ul class="game-list">
         <li v-for="entry in listing.games" :key="entry.game">
           <GameCard

@@ -12,6 +12,15 @@ const countToday = async (pool: Pool): Promise<string> => {
   return rows[0]?.count ?? '0'
 }
 
+/** Every stored row for today, so a failed read can be shown to have changed nothing. */
+const snapshotToday = async (pool: Pool): Promise<unknown[]> => {
+  const { rows } = await pool.query<{ game: string; payload: unknown; solution: unknown }>(
+    `SELECT game, payload, solution FROM daily_puzzles
+     WHERE puzzle_date = (now() AT TIME ZONE 'UTC')::date ORDER BY game`,
+  )
+  return rows
+}
+
 describe('GET /api/daily listing', () => {
   const realQuery = getPool().query.bind(getPool())
 
@@ -61,6 +70,9 @@ describe('GET /api/daily listing', () => {
   })
 
   it('reports a structured DATABASE_UNAVAILABLE per game when the catalog is unreachable', async () => {
+    // FR-050 / FR-051 / SC-008: the stored puzzle must survive the failure untouched.
+    const before = pool ? await snapshotToday(pool) : null
+
     // Every probe query fails, which is what an unreachable catalog looks like to the server.
     ;(getPool() as unknown as { query: () => Promise<never> }).query = () =>
       Promise.reject(new Error('connection refused'))
@@ -74,5 +86,10 @@ describe('GET /api/daily listing', () => {
       expect(entry.code).toBe('DATABASE_UNAVAILABLE')
     }
     expect(listing.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+    // A failed listing is a read failure: nothing is inserted, changed, or removed.
+    if (pool && before) {
+      expect(await snapshotToday(pool)).toEqual(before)
+    }
   })
 })

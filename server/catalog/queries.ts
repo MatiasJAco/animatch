@@ -282,6 +282,21 @@ export async function fetchAnimesByIds(animeMalIds: number[]): Promise<AnimeRow[
   return rows
 }
 
+/**
+ * One anime's calendar season, used to judge a same_season criterion for a candidate tile.
+ * Only the two columns the criterion needs are read, and the row is ordered by year so the
+ * result is deterministic (Principle I: this module owns every catalog read).
+ */
+export async function fetchAnimeSeasonById(
+  animeMalId: number,
+): Promise<{ year: number; season: string } | null> {
+  const { rows } = await getPool().query<{ year: number; season: string }>(
+    `SELECT year, season FROM anime_seasons WHERE anime_mal_id = $1 ORDER BY year LIMIT 1`,
+    [animeMalId],
+  )
+  return rows[0] ?? null
+}
+
 // Groups candidate tiles: characters whose linkage fields are already pinned to the anime,
 // language, and voice actor they are judged on. Only the eight allowed facts are read; no image
 // column and no duplicated label is ever returned (FR-031, FR-032, R-011, R-013).

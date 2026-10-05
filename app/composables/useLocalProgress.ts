@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { GameId } from '~~/server/game/ids'
+import { isGameId, type GameId } from '~~/server/game/ids'
 import { getUtcDateNow, type PuzzleDate } from '~~/server/utils/day'
 
 const STORAGE_KEY = 'animatch:v1:progress'
@@ -11,11 +11,25 @@ export interface LocalGameState {
   attempts: number
   round?: number
   matched?: string[]
-  matchedTiles?: string[]
-  wrongPairs?: number
+  // match_the_series: grid series already colored green and locked.
+  greenSeries?: string[]
+  // match_the_series: clue cards already answered correctly.
+  answeredClues?: string[]
+  // match_the_series: index of the clue card currently on screen.
+  clueIndex?: number
+  // match_the_series: wrong clicks so far, three ends the game.
+  wrongClicks?: number
+  // match_the_series: the clue card and series that earned each green tile. The server
+  // re-derives the green set from these against the answer key it never sends (Principle IV).
+  greenPairs?: Array<{ clueKey: string; seriesKey: string }>
+  // match_the_series: the rejected pairings, from which the server re-derives the miss count.
+  missLog?: Array<{ clueKey: string; seriesKey: string }>
   found?: string[]
   // Groups keeps the revealed criterion per found group so a resumed board can show it again.
   foundGroups?: Array<{ keys: string[]; criterion: unknown }>
+  // Groups: the rejected proposals. The server re-derives the mistake count from these, so
+  // they must be stored for a resumed board to keep being verifiable (Constitution IV).
+  missLog?: string[][]
   mistakes?: number
   endedAt?: string
 }
@@ -124,10 +138,48 @@ export function useLocalProgress() {
     })
   }
 
-  const reset = () => {
+  // FR-057: clears one game for the current day. Every other game, the entry's
+  // date, and the separate animatch:v1:prefs language entry are left untouched.
+  // FR-058: no network call and no server write.
+  const resetGame = (game: GameId) => {
+    // A caller that passes an unknown id used to delete the literal key
+    // "undefined" and silently clear nothing. The id arrives from a template
+    // binding, so an unresolved binding must fail loudly instead.
+    if (!isGameId(game)) {
+      throw new Error(`resetGame: unknown game id ${String(game)}`)
+    }
+    if (!current.value) {
+      load()
+    }
+    if (!current.value) {
+      return
+    }
+    delete current.value.games[game]
+    save()
+  }
+
+  // FR-057b: the home control clears all three games at once. It replaces the day's
+  // entry with an empty one in a single write, so the store is never left partially
+  // cleared, and the date entry keeps the day the visitor is on (R-024).
+  // FR-057c: the same day regenerates the identical board (R-005), so clearing device
+  // state is sufficient and no daily_puzzles row is ever read, written, or deleted.
+  // animatch:v1:prefs holds the language and is a separate key, so it survives.
+  const resetAllGames = () => {
+    if (!current.value) {
+      load()
+    }
     current.value = { v: 1, date: getUtcDateNow(), games: {} }
     save()
   }
 
-  return { load, save, getGameState, setGameState, markFinished, reset, current }
+  return {
+    load,
+    save,
+    getGameState,
+    setGameState,
+    markFinished,
+    resetGame,
+    resetAllGames,
+    current,
+  }
 }

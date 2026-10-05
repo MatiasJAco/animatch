@@ -1,6 +1,7 @@
 import type { GameId } from './ids'
 import { GAME_IDS } from './ids'
 import { getUtcDateNow, getCalendarSeason, type PuzzleDate } from '../utils/day'
+import { logDatabaseFailure } from '../db/pool'
 import {
   countMatchableCurrentSeasonSeries,
   countPeopleWithAtLeastOneRole,
@@ -43,7 +44,10 @@ async function resolveStatus(game: GameId): Promise<DailyGameEntry> {
     return (await probeCoverage(game))
       ? { game, status: 'ready' }
       : { game, status: 'unavailable', code: 'PUZZLE_UNAVAILABLE' }
-  } catch {
+  } catch (error) {
+    // Principle V: the visitor sees DATABASE_UNAVAILABLE, the operator sees why. The
+    // underlying error is logged, never returned.
+    logDatabaseFailure(`daily_listing.coverage ${game}`, error)
     return { game, status: 'error', code: 'DATABASE_UNAVAILABLE' }
   }
 }

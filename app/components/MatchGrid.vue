@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type {
+  MatchTheSeriesClue,
   MatchTheSeriesOutcome,
   MatchTheSeriesPayloadData,
 } from '~~/server/game/matchTheSeries'
@@ -8,196 +9,140 @@ import { useLocale } from '~/composables/useLocale'
 
 const props = defineProps<{
   puzzle: MatchTheSeriesPayloadData
-  initialMatched?: string[]
-  initialMatchedTiles?: string[]
-  initialWrongPairs?: number
-  initialAttempts?: number
+  greenSeries: string[]
+  answeredClues: string[]
+  clueIndex: number
+  wrongClicks: number
+  attempts: number
+  finished: boolean
+  busy?: boolean
+  /** The full mapping, present only once the game has been lost. */
+  answers?: Record<string, string> | null
 }>()
 
 // Board position travels back to the page so it can persist progress on every accepted answer
-// (FR-043a). Storage never holds puzzle content, only which pairs are already locked.
+// (FR-043a). Storage never holds puzzle content, only which tiles are green and which cards
+// are already answered.
 const emit = defineEmits<{
-  outcome: [
-    outcome: MatchTheSeriesOutcome & {
-      attempts: number
-      wrongPairs: number
-      matched: string[]
-      matchedTiles: string[]
-    },
-  ]
+  answer: [seriesKey: string]
+  next: []
 }>()
 
 const { t } = useLocale()
 
-const selectedTile = ref<string | null>(null)
-const selectedSeries = ref<string | null>(null)
-const matchedTiles = ref<string[]>(props.initialMatchedTiles ?? [])
-const matchedSeries = ref<string[]>(props.initialMatched ?? [])
-const wrongPairs = ref(props.initialWrongPairs ?? 0)
-const attempts = ref(props.initialAttempts ?? 0)
-const busy = ref(false)
-const finished = ref(false)
-const solution = ref<Record<string, string> | null>(null)
-const revealedPairs = ref<Record<string, string>>({})
 const lastFeedback = ref<'hit' | 'miss' | null>(null)
 
-const matchedTileSet = computed(() => new Set(matchedTiles.value))
-const matchedSeriesSet = computed(() => new Set(matchedSeries.value))
-const isLocked = (key: string) => matchedTileSet.value.has(key)
+const greenSet = computed(() => new Set(props.greenSeries))
+const answeredSet = computed(() => new Set(props.answeredClues))
+const clue = computed<MatchTheSeriesClue | null>(
+  () => props.puzzle.clues[props.clueIndex] ?? null,
+)
 
-const pickTile = (key: string) => {
-  if (busy.value || finished.value || isLocked(key)) return
-  selectedTile.value = selectedTile.value === key ? null : key
-}
+// FR-026c: Next may only offer a different card that is not already answered correctly.
+const nextCandidates = computed(() =>
+  props.puzzle.clues.filter((candidate, index) => index !== props.clueIndex && !answeredSet.value.has(candidate.key)),
+)
+const canSkip = computed(() => !props.finished && !props.busy && nextCandidates.value.length > 0)
 
-const pickSeries = (key: string) => {
-  if (busy.value || finished.value || matchedSeriesSet.value.has(key)) return
-  selectedSeries.value = selectedSeries.value === key ? null : key
-}
+// FR-027b: a tile that is already green is locked and changes nothing.
+const isLocked = (key: string) => greenSet.value.has(key)
 
-const submit = async () => {
-  if (busy.value || finished.value || !selectedTile.value || !selectedSeries.value) return
-  const tileKey = selectedTile.value
-  const seriesKey = selectedSeries.value
-  busy.value = true
-  try {
-    const res = await fetch('/api/daily/match_the_series/attempt', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        tileKey,
-        seriesKey,
-        matched: matchedSeries.value,
-      }),
-    })
-    if (!res.ok) {
-      selectedTile.value = null
-      selectedSeries.value = null
-      return
-    }
-    const outcome = (await res.json()) as MatchTheSeriesOutcome
-
-    attempts.value += 1
-    lastFeedback.value = outcome.result
-    if (outcome.result === 'hit') {
-      matchedTiles.value = [...matchedTiles.value, tileKey]
-      matchedSeries.value = [...matchedSeries.value, seriesKey]
-      revealedPairs.value = { ...revealedPairs.value, [tileKey]: seriesKey }
-      if (outcome.state === 'won') {
-        finished.value = true
-      }
-    } else {
-      wrongPairs.value += 1
-      if (outcome.state === 'lost') {
-        finished.value = true
-        solution.value = 'answers' in outcome ? outcome.answers : null
-      }
-    }
-
-    emit('outcome', {
-      ...outcome,
-      attempts: attempts.value,
-      wrongPairs: wrongPairs.value,
-      matched: matchedSeries.value,
-      matchedTiles: matchedTiles.value,
-    })
-
-    // FR-027a: a wrong pair below the limit returns both tiles to unselected.
-    selectedTile.value = null
-    selectedSeries.value = null
-  } finally {
-    busy.value = false
+const clickSeries = (seriesKey: string) => {
+  if (props.busy || props.finished || !clue.value || isLocked(seriesKey)) {
+    return
   }
+  emit('answer', seriesKey)
 }
 
-// FR-029: one identical neutral placeholder for every tile, no external image.
-// Once the game is over the board shows each pairing in full, so a tile carries its series
-// title and a series carries the tile it belongs to.
-const partnerLabel = (key: string): string => {
-  if (solution.value) {
-    const tileKey = key.startsWith('a:')
-      ? Object.keys(solution.value).find((tile) => solution.value?.[tile] === key)
-      : key
-    const seriesKey = solution.value[tileKey as string]
-    if (!tileKey || !seriesKey) {
-      return ''
-    }
-    const tile = props.puzzle.tiles.find((candidate) => candidate.key === tileKey)
-    const series = props.puzzle.series.find((candidate) => candidate.key === seriesKey)
-    return (key.startsWith('a:') ? tile?.name : series?.title) ?? ''
+const skip = () => {
+  if (!canSkip.value || !clue.value) {
+    return
   }
-
-  const revealed = revealedPairs.value[key]
-  if (!revealed) {
-    return ''
-  }
-  const series = props.puzzle.series.find((candidate) => candidate.key === revealed)
-  return series?.title ?? ''
+  // FR-026b: a free skip. It advances the card on screen, changes no counter, and makes
+  // no request at all (R-021).
+  lastFeedback.value = null
+  emit('next')
 }
+
+// FR-027: after a loss every card's series is shown, so the board can be read in full.
+const seriesForClue = (clueKey: string): string | null => {
+  const seriesKey = props.answers?.[clueKey]
+  if (!seriesKey) {
+    return null
+  }
+  return props.puzzle.grid.series.find((series) => series.key === seriesKey)?.title ?? null
+}
+
+// FR-027: the loss discloses the pairing of every clue, not only the one on screen, so a
+// single annotated card would leave the rest of the deck unreadable.
+const revealedPairings = computed(() =>
+  props.answers
+    ? props.puzzle.clues
+        .map((clue) => ({ name: clue.name, kind: clue.kind, series: seriesForClue(clue.key) }))
+        .filter((entry) => entry.series !== null)
+    : [],
+)
 </script>
 
 <template>
   <section class="stack">
     <p class="badge">
-      {{ t('match.mistakes', { current: wrongPairs, max: puzzle.wrongLimit }) }}
+      {{ t('match.mistakes', { current: wrongClicks, max: puzzle.wrongLimit }) }}
       &middot;
       {{ t('result.attempts', { count: attempts }) }}
     </p>
 
-    <div v-if="solution" class="feedback--wrong">
-      {{ t('match.game_over') }}
-    </div>
-    <div v-else-if="lastFeedback" class="feedback--wrong">
-      {{ t('match.wrong_pair') }}
-    </div>
-
-    <div class="match-board">
-      <div>
-        <h3>{{ t('match.grid.left') }}</h3>
-        <div class="grid-4x4">
-          <button
-            v-for="tile in puzzle.tiles"
-            :key="tile.key"
-            type="button"
-            class="tile"
-            :aria-pressed="selectedTile === tile.key"
-            :disabled="isLocked(tile.key) || finished"
-            @click="pickTile(tile.key)"
-          >
-            <span class="tile__art" aria-hidden="true" />
-            <span class="tile__label">{{ tile.name }}</span>
-            <span v-if="isLocked(tile.key)" class="tile__label">{{ partnerLabel(tile.key) }}</span>
-          </button>
-        </div>
+    <!-- FR-024a: exactly one card above the grid, showing a name and a project placeholder. -->
+    <div v-if="clue" class="clue-card" aria-live="polite">
+      <span class="clue-card__art" aria-hidden="true" />
+      <div class="clue-card__body">
+        <p class="clue-card__kind">
+          {{ t(clue.kind === 'character' ? 'match.clue.character' : 'match.clue.person') }}
+        </p>
+        <p class="clue-card__name">{{ clue.name }}</p>
+        <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
       </div>
-
-      <div>
-        <h3>{{ t('match.grid.right') }}</h3>
-        <div class="grid-4x4">
-          <button
-            v-for="series in puzzle.series"
-            :key="series.key"
-            type="button"
-            class="tile"
-            :aria-pressed="selectedSeries === series.key"
-            :disabled="matchedSeriesSet.has(series.key) || finished"
-            @click="pickSeries(series.key)"
-          >
-            <span class="tile__art" aria-hidden="true" />
-            <span class="tile__label">{{ series.title }}</span>
-            <span v-if="solution" class="tile__label">{{ partnerLabel(series.key) }}</span>
-          </button>
-        </div>
-      </div>
+      <p class="muted">{{ t('match.placeholder') }}</p>
     </div>
 
-    <button
-      class="button"
-      type="button"
-      :disabled="busy || finished || !selectedTile || !selectedSeries"
-      @click="submit"
-    >
-      {{ t('match.submit') }}
+    <div v-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
+    <p v-else-if="lastFeedback === 'miss'" class="feedback--wrong">{{ t('match.wrong') }}</p>
+    <p v-else-if="lastFeedback === 'hit'" class="feedback--correct">{{ t('match.green') }}</p>
+
+    <div v-if="revealedPairings.length > 0" class="stack">
+      <h3>{{ t('match.reveal.title') }}</h3>
+      <ul class="reveal-list">
+        <li v-for="entry in revealedPairings" :key="entry.name">
+          <span class="muted">
+            {{ entry.kind === 'character' ? t('match.clue.character') : t('match.clue.person') }}
+          </span>
+          <strong>{{ entry.name }}</strong>
+          <span>{{ entry.series }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- FR-024: exactly one grid, three by three. -->
+    <h3>{{ t('match.board') }}</h3>
+    <div class="grid-3x3">
+      <button
+        v-for="series in puzzle.grid.series"
+        :key="series.key"
+        type="button"
+        class="tile"
+        :class="{ 'tile--green': isLocked(series.key) }"
+        :disabled="isLocked(series.key) || finished || busy"
+        @click="clickSeries(series.key)"
+      >
+        <span class="tile__label">{{ series.title }}</span>
+      </button>
+    </div>
+
+    <button class="button" type="button" :disabled="!canSkip" @click="skip">
+      {{ t('match.next') }}
     </button>
+    <p v-if="finished || nextCandidates.length === 0" class="muted">
+      {{ t('match.next.unavailable') }}
+    </p>
   </section>
 </template>

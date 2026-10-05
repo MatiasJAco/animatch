@@ -91,16 +91,20 @@ paths:
                       - { id: 88, name: "Person B" }
                     initialVisible: { id: 77, name: "Person C", roleCount: 143 }
                 matchTheSeries:
-                  summary: Match the Series, names plus placeholder area
+                  summary: Match the Series, three-by-three grid plus the clue deck
                   value:
                     game: match_the_series
                     date: "2026-10-02"
                     season: { season: fall, year: 2026 }
-                    tiles:
+                    grid:
+                      rows: 3
+                      cols: 3
+                      series:
+                        - { key: "a:9001", title: "Series One" }
+                        - { key: "a:9102", title: "Series Two" }
+                    clues:
                       - { key: "c:12345", kind: character, name: "Character A" }
                       - { key: "p:678", kind: person, name: "Person D" }
-                    series:
-                      - { key: "a:9001", title: "Series One" }
                     wrongLimit: 3
                 groups:
                   summary: Groups, 16 tiles with no criterion data
@@ -149,8 +153,12 @@ paths:
                 summary: More or Less, answer for round 0
                 value: { round: 0, answer: more }
               matchTheSeries:
-                summary: Match the Series, one pairing
-                value: { tileKey: "c:12345", seriesKey: "a:9001" }
+                summary: Match the Series, one click on a grid tile
+                description: |
+                  The clue card key is required: the visitor answers for the card currently on
+                  screen, so the server must be told which one it was. The Next control never calls
+                  this endpoint.
+                value: { clueKey: "c:12345", seriesKey: "a:9001" }
               groups:
                 summary: Groups, four tiles proposed as a group
                 value:
@@ -185,20 +193,25 @@ paths:
                     counts: { hidden: 96, visible: 143 }
                     state: lost
                 matchTheSeriesHit:
-                  value: { result: hit, tileKey: "c:12345", seriesKey: "a:9001", state: in_progress }
+                  summary: Correct click, the tile turns green
+                  value: { result: hit, clueKey: "c:12345", seriesKey: "a:9001", state: in_progress }
                 matchTheSeriesMissInPlay:
-                  summary: Wrong pair below the limit, nothing revealed
+                  summary: Wrong click below the limit, nothing revealed
                   description: |
-                    No correctSeriesKey is present, and no other pairing is disclosed. The client
-                    returns both tiles to an unselected state.
-                  value: { result: miss, tileKey: "c:12345", seriesKey: "a:9102", state: in_progress }
+                    No correctSeriesKey and no answers map are present. The clicked tile stays
+                    uncolored. The client then rotates the clue card to another entity and keeps
+                    the abandoned entity eligible for a later rotation or Next (FR-027c, FR-027d);
+                    that rotation is client-side and needs no request. This response is unchanged
+                    by the rotation.
+                  value: { result: miss, clueKey: "c:12345", seriesKey: "a:9102", state: in_progress }
                 matchTheSeriesGameOver:
-                  summary: Wrong pair that ends the game, pairings revealed
+                  summary: Wrong click that ends the game, pairings revealed
                   value:
                     result: miss
-                    tileKey: "c:12345"
+                    clueKey: "c:12345"
                     seriesKey: "a:9102"
                     correctSeriesKey: "a:9001"
+                    answers: { "c:12345": "a:9001", "p:678": "a:9102" }
                     remainingWrong: 0
                     state: lost
                 groupsHit:
@@ -369,7 +382,7 @@ components:
 
     MatchTheSeriesPuzzle:
       type: object
-      required: [game, date, season, tiles, series, wrongLimit]
+      required: [game, date, season, grid, clues, wrongLimit]
       properties:
         game: { type: string, enum: [match_the_series] }
         date: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
@@ -381,14 +394,34 @@ components:
               type: string
               enum: [winter, spring, summer, fall]
             year: { type: integer }
-          description: Calendar season at play time in UTC. Never an older season.
-        tiles:
-          type: array
-          minItems: 16
-          maxItems: 16
           description: |
-            Left grid, rendered as a name plus a neutral in-project placeholder. Carries no image
-            URL and no anime id, since the anime id is the answer.
+            Calendar season at play time in UTC. Never an older season. A season with fewer than
+            nine series is an error state, never a smaller grid.
+        grid:
+          type: object
+          required: [rows, cols, series]
+          description: The answer board. Tiles are series titles; each becomes green when answered.
+          properties:
+            rows: { type: integer, const: 3 }
+            cols: { type: integer, const: 3 }
+            series:
+              type: array
+              minItems: 9
+              maxItems: 9
+              items:
+                type: object
+                required: [key, title]
+                properties:
+                  key: { type: string, description: "Series identity, never shown to the visitor." }
+                  title: { type: string, description: The only fact displayed on a tile. }
+        clues:
+          type: array
+          minItems: 9
+          description: |
+            The clue deck, in served order, two cards per grid series. One card is shown at a time
+            above the grid, rendered as a name plus a neutral in-project placeholder. A card carries
+            no image URL and no series key: that mapping is the answer and lives only in the stored
+            solution. Next is a client-side advance through this order.
           items:
             type: object
             required: [key, kind, name]
@@ -396,17 +429,6 @@ components:
               key: { type: string, description: "Kind-prefixed so a character and a person cannot collide." }
               kind: { type: string, enum: [character, person] }
               name: { type: string }
-        series:
-          type: array
-          minItems: 16
-          maxItems: 16
-          description: Right grid, ordered independently of the left grid.
-          items:
-            type: object
-            required: [key, title]
-            properties:
-              key: { type: string }
-              title: { type: string }
         wrongLimit: { type: integer, const: 3 }
 
     GroupsPuzzle:
@@ -441,10 +463,12 @@ components:
 
     MatchTheSeriesAttempt:
       type: object
-      required: [tileKey, seriesKey]
+      required: [clueKey, seriesKey]
       properties:
-        tileKey: { type: string }
-        seriesKey: { type: string }
+        clueKey:
+          type: string
+          description: The clue card that was on screen, so the answer is scored against it.
+        seriesKey: { type: string, description: The grid tile the visitor clicked. }
 
     GroupsAttempt:
       type: object
@@ -481,16 +505,24 @@ components:
       required: [result, state]
       properties:
         result: { type: string, enum: [hit, miss] }
-        tileKey: { type: string }
+        clueKey: { type: string }
         seriesKey: { type: string }
         correctSeriesKey:
           type: string
           description: |
             Present only when the miss ends the game. Absent on every miss that leaves the game in
-            play, so that a wrong pair below the mistake limit discloses no pairing at all.
+            play, so that a wrong click below the mistake limit discloses no pairing at all, and so
+            that the client's post-mistake rotation to another entity cannot be used to infer the
+            answer for the card it replaced (FR-027a, FR-027c, SC-018).
+        answers:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Clue card key to series key, present only when the miss ends the game, so every pairing
+            can be revealed at that point (FR-027).
         remainingWrong:
           type: integer
-          description: Wrong pairs still available before the game ends. Absent unless the game ended.
+          description: Wrong clicks still available before the game ends. Absent unless the game ended.
         state:
           type: string
           enum: [in_progress, won, lost]
