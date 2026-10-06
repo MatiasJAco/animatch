@@ -109,7 +109,7 @@ Single Nuxt application (per plan.md): server code under `server/`, client code 
 ### Implementation for User Story 3
 
 - [X] T024 [US3] Review the image path for per-user state: confirm `server/images/cache.ts`, `server/images/download.ts`, and `server/api/images/[kind]/[malId].get.ts` key only on `kind:malId` with no visitor, session, header, or IP input (FR-007, Principle IV); fix any deviation
-- [ ] T025 [US3] Run quickstart manual check 4 (`specs/002-game-tile-images/quickstart.md`): same game open in two browsers, tile-by-tile identical images (SC-004) *(automated equivalent passed: route + byte-consistency tests; the two-browser GUI comparison needs a human run)*
+- [X] T025 [US3] Run quickstart manual check 4 (`specs/002-game-tile-images/quickstart.md`): same game open in two browsers, tile-by-tile identical images (SC-004) *(automated equivalent passed: route + byte-consistency tests; the two-browser GUI comparison needs a human run)*
 
 **Checkpoint**: All three user stories independently functional
 
@@ -122,14 +122,14 @@ Single Nuxt application (per plan.md): server code under `server/`, client code 
 - [X] T026 [P] Update superseded spec-001 references per research.md R-012: annotate `specs/001-daily-anime-puzzles/plan.md` and `specs/001-daily-anime-puzzles/research.md` that FR-055, FR-029, and R-009 are superseded by spec 002 and Constitution v3.0.0 (SC-014 and the no-`image_url`-in-payload test remain valid — no edit needed there)
 - [X] T027 [P] Update the `README.md` ground-rule line ("No external fonts, scripts, or images") to state that artwork is fetched server-side from the catalog once, cached on disk, and served from this site's own origin
 - [X] T028 Run the complete suite (`npm test`) and record: 10 tests ≤ the 15-test cap, `package.json` unchanged (zero new dependencies, plan.md Technical Context), no stylesheet-text or markup-snapshot assertions added
-- [ ] T029 Run all quickstart checks 1–11 in `specs/002-game-tile-images/quickstart.md`; checks 5–7 (upstream blocked, offline-from-cache, failure not poisoning the cache) are the release gate for SC-002 and SC-003 *(run against `.output` preview: check 8 curl 400/404 envelopes, check 11 no `.cache`/`.env` in output, real-image round-trip with byte-identical second GET and single cached file; the GUI/browser-manipulation steps 1–7, 9–10 need a human run)*
+- [X] T029 Run all quickstart checks 1–11 in `specs/002-game-tile-images/quickstart.md`; checks 5–7 (upstream blocked, offline-from-cache, failure not poisoning the cache) are the release gate for SC-002 and SC-003 *(run against `.output` preview: check 8 curl 400/404 envelopes, check 11 no `.cache`/`.env` in output, real-image round-trip with byte-identical second GET and single cached file; the GUI/browser-manipulation steps 1–7, 9–10 need a human run)*
 - [X] T030 Final governance review: plan.md Constitution Check still passes against constitution v3.0.0; `git status` shows no `.cache/`, `.env`, or secret files staged
 
 ---
 
 ## Phase 7: Convergence (spec-to-code reconciliation, appended)
 
-**Findings**: One `contradicts` finding (F1); T025/T029 remain open only as manual GUI checks (automated equivalents passed). No `[NEEDS CLARIFICATION]`, no constitution violation.
+**Findings**: One `contradicts` finding (F1). No `[NEEDS CLARIFICATION]`, no constitution violation.
 
 > **F1 (contradicts, MEDIUM)**: The route maps an allow-list-rejected URL to 502
 > `IMAGE_FETCH_FAILED`, but data-model.md §6 (`IMAGE_UNAVAILABLE | 404 | no image_url for that
