@@ -1,0 +1,158 @@
+openapi: 3.1.0
+info:
+  title: Animatch Image API
+  version: "1.0.0"
+  description: |
+    The one route added by feature 002-game-tile-images. It extends, and does not modify, the
+    puzzle contract in specs/001-daily-anime-puzzles/contracts/openapi.yaml.
+
+    Contract rules for this route:
+      - The browser only ever requests this site's own origin. The upstream download happens
+        server-side and is never exposed to the client (research R-001).
+      - The client never passes a URL. Kind and catalog id are the only inputs, so the route
+        cannot be aimed at an arbitrary host (research R-001, R-007).
+      - Once a file is on disk it is served forever and never re-downloaded (research R-003).
+      - Failures use the same error envelope as the puzzle API. An <img> failure additionally
+        falls back client-side to the CSS placeholder, so no player ever sees a broken icon.
+      - Responses are language-neutral bytes; the envelope's English message is a fallback only.
+
+servers:
+  - url: /
+    description: Same origin as the site.
+
+paths:
+  /api/images/{kind}/{malId}:
+    get:
+      operationId: getEntityImage
+      summary: Cached artwork for one anime, character, or person
+      description: |
+        Resolves the catalog's image_url for the entity, downloads it on first request into the
+        on-disk cache, and serves the cached bytes from then on. Concurrent first requests share
+        one download. Upstream failures return the envelope and write nothing to disk.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [anime, character, person]
+          description: Entity type; maps 1:1 to the catalog table.
+        - name: malId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Catalog primary key of the entity.
+      responses:
+        "200":
+          description: The image bytes, immutable in the browser cache.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: public, max-age=31536000, immutable
+            Content-Type:
+              schema:
+                type: string
+                enum: [image/jpeg, image/png, image/webp, image/gif]
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/InvalidImageRequest"
+        "404":
+          $ref: "#/components/responses/ImageUnavailable"
+        "502":
+          $ref: "#/components/responses/ImageFetchFailed"
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+
+components:
+  responses:
+    InvalidImageRequest:
+      description: Kind is not in the allow-list or malId is not a positive integer.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            badKind:
+              value:
+                error:
+                  code: INVALID_IMAGE_REQUEST
+                  message: That image request is not valid.
+    ImageUnavailable:
+      description: |
+        No image_url for that entity, or the stored URL fails the https/host allow-list.
+        Nothing was cached; a later request behaves identically.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            noImage:
+              value:
+                error:
+                  code: IMAGE_UNAVAILABLE
+                  message: That image is not available.
+    ImageFetchFailed:
+      description: |
+        Upstream download failed, timed out, returned a disallowed content type, or is in the
+        five-minute backoff window after such a failure. Nothing was cached.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            upstreamDown:
+              value:
+                error:
+                  code: IMAGE_FETCH_FAILED
+                  message: That image could not be loaded right now.
+    DatabaseUnavailable:
+      description: Catalog lookup failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            dbDown:
+              value:
+                error:
+                  code: DATABASE_UNAVAILABLE
+                  message: The puzzle could not be loaded right now.
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_IMAGE_REQUEST
+                - IMAGE_UNAVAILABLE
+                - IMAGE_FETCH_FAILED
+                - DATABASE_UNAVAILABLE
+            message:
+              type: string
+              description: English fallback; the browser renders its own localized copy.

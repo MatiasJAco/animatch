@@ -2,6 +2,13 @@ import { getPool } from '../db/pool'
 import type { GameId } from '../game/ids'
 import type { PuzzleDate } from '../utils/day'
 
+export type ImageKind = 'anime' | 'character' | 'person'
+
+// Every catalog query in this module is hand-written and restricts to the allowed facts:
+// person name, character name, anime title, anime type, anime year, anime season,
+// voice language, voice role, and the single artwork reference (image_url) that the
+// server-side image route resolves. No favorites, biography, or import table is ever read.
+
 export interface PeopleRow {
   mal_id: number
   name: string
@@ -35,10 +42,6 @@ export interface AnimeSeasonRow {
   year: number
   season: string
 }
-
-// Every catalog query in this module is hand-written and restricts to the allowed facts:
-// person name, character name, anime title, anime type, anime year, anime season,
-// voice language, voice role. No image_url, favorites, biography, or import table is ever read.
 
 // FR-023: the career role count is every voice_roles record attributed to the person,
 // regardless of character, series, or language. One row per person, no pagination:
@@ -531,4 +534,46 @@ export async function fetchSameVoiceActorPools(limit = 200): Promise<
     }
   }
   return pools
+}
+
+// The image route's three reads. Each is a single allow-listed column resolved by catalog id
+// only: the client never supplies a URL, so the route can never be aimed at an arbitrary host
+// (feature 002 R-001, R-007). image_url is presentation data, never an answer, and never leaks
+// into a puzzle payload.
+
+export async function fetchAnimeImageUrl(malId: number): Promise<string | null> {
+  const { rows } = await getPool().query<{ image_url: string | null }>(
+    `SELECT image_url FROM anime WHERE mal_id = $1`,
+    [malId],
+  )
+  return rows[0]?.image_url ?? null
+}
+
+export async function fetchCharacterImageUrl(malId: number): Promise<string | null> {
+  const { rows } = await getPool().query<{ image_url: string | null }>(
+    `SELECT image_url FROM characters WHERE mal_id = $1`,
+    [malId],
+  )
+  return rows[0]?.image_url ?? null
+}
+
+export async function fetchPersonImageUrl(malId: number): Promise<string | null> {
+  const { rows } = await getPool().query<{ image_url: string | null }>(
+    `SELECT image_url FROM people WHERE mal_id = $1`,
+    [malId],
+  )
+  return rows[0]?.image_url ?? null
+}
+
+// The image route resolves its URL through this single dispatcher; the client can never name
+// the table or the URL (feature 002 R-001).
+export function catalogImageUrl(kind: ImageKind, malId: number): Promise<string | null> {
+  switch (kind) {
+    case 'anime':
+      return fetchAnimeImageUrl(malId)
+    case 'character':
+      return fetchCharacterImageUrl(malId)
+    case 'person':
+      return fetchPersonImageUrl(malId)
+  }
 }

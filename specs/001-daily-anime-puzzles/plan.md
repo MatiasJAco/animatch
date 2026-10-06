@@ -2,6 +2,13 @@
 
 **Branch**: `feat/sdd-inicial` | **Date**: 2026-10-05 (revised) | **Spec**: [spec.md](./spec.md)
 
+> **Supersession note (2026-10-06, Constitution v3.0.0)**: feature 002 (`specs/002-game-tile-images`)
+> replaces the no-artwork stance of this plan. FR-055 (no external artwork), FR-029 (CSS
+> placeholder only), and research.md R-009 (clue card images without artwork) are **superseded**:
+> game tiles now load catalog artwork server-side through the `/api/images/{kind}/{malId}` route.
+> SC-014 (the page never requests any host but its own) stays TRUE, and the no-`image_url`-in-payload
+> test (`tests/routes/puzzle.get.test.ts`) still passes unchanged.
+
 **Input**: Feature specification from `specs/001-daily-anime-puzzles/spec.md`
 
 ## Summary

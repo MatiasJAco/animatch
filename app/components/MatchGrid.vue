@@ -6,6 +6,7 @@ import type {
   MatchTheSeriesPayloadData,
 } from '~~/server/game/matchTheSeries'
 import { useLocale } from '~/composables/useLocale'
+import { entityImageId } from '~/utils/entityImage'
 
 const props = defineProps<{
   puzzle: MatchTheSeriesPayloadData
@@ -31,6 +32,10 @@ const emit = defineEmits<{
 const { t } = useLocale()
 
 const lastFeedback = ref<'hit' | 'miss' | null>(null)
+
+// The clue card's image availability, reported by the EntityImage it owns, decides whether
+// the "Image unavailable" fallback caption shows (it must never sit under a loaded image).
+const clueArt = ref<{ available: boolean } | null>(null)
 
 const greenSet = computed(() => new Set(props.greenSeries))
 const answeredSet = computed(() => new Set(props.answeredClues))
@@ -94,7 +99,13 @@ const revealedPairings = computed(() =>
 
     <!-- FR-024a: exactly one card above the grid, showing a name and a project placeholder. -->
     <div v-if="clue" class="clue-card" aria-live="polite">
-      <span class="clue-card__art" aria-hidden="true" />
+      <EntityImage
+        ref="clueArt"
+        class="clue-card__art"
+        :kind="clue.kind"
+        :id="entityImageId(clue.kind, clue.key)"
+        :name="clue.name"
+      />
       <div class="clue-card__body">
         <p class="clue-card__kind">
           {{ t(clue.kind === 'character' ? 'match.clue.character' : 'match.clue.person') }}
@@ -102,7 +113,7 @@ const revealedPairings = computed(() =>
         <p class="clue-card__name">{{ clue.name }}</p>
         <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
       </div>
-      <p class="muted">{{ t('match.placeholder') }}</p>
+      <p v-if="clueArt && !clueArt.available" class="muted">{{ t('match.placeholder') }}</p>
     </div>
 
     <div v-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
@@ -134,6 +145,12 @@ const revealedPairings = computed(() =>
         :disabled="isLocked(series.key) || finished || busy"
         @click="clickSeries(series.key)"
       >
+        <EntityImage
+          class="tile__art"
+          kind="anime"
+          :id="entityImageId('anime', series.key)"
+          :name="series.title"
+        />
         <span class="tile__label">{{ series.title }}</span>
       </button>
     </div>

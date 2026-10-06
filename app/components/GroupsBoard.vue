@@ -6,6 +6,7 @@ import type {
   GroupsPayloadData,
 } from '~~/server/game/groups'
 import { GROUPS_GROUP_SIZE } from '~~/server/game/groups'
+import { entityImageId } from '~/utils/entityImage'
 import { useLocale } from '~/composables/useLocale'
 import {
   isRetryableCode,
@@ -197,7 +198,12 @@ const visibleTiles = computed(() =>
         :disabled="busy || finished || isFound(tile.key)"
         @click="toggle(tile.key)"
       >
-        <span class="tile__art" aria-hidden="true" />
+        <EntityImage
+          class="tile__art"
+          :kind="tile.kind"
+          :id="entityImageId(tile.kind, tile.key)"
+          :name="tile.name"
+        />
         <span class="tile__label">{{ tile.name }}</span>
         <span v-if="isFound(tile.key)" class="tile__label">
           {{ criterionLabel(groupByKey(tile.key)?.criterion as GroupCriterion) }}

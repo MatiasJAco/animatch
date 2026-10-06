@@ -110,11 +110,13 @@ const retry = () => {
     <p class="muted">{{ t('more_or_less.question') }}</p>
 
     <div class="comparison">
-      <div>
+      <div class="comparison__card">
+        <EntityImage class="tile__art" kind="person" :id="left.id" :name="left.name" />
         <strong>{{ left.name }}</strong>
       </div>
       <div aria-hidden="true">&mdash;</div>
-      <div>
+      <div class="comparison__card">
+        <EntityImage class="tile__art" kind="person" :id="right.id" :name="right.name" />
         <strong>{{ right.name }}</strong>
         <span class="badge">{{ given }}</span>
       </div>

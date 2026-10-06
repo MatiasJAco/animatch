@@ -77,4 +77,7 @@ Vitest, capped at 15 tests for the whole feature, with no network access require
   browser storage.
 - The day is a UTC date and rolls over at 00:00 UTC. The browser's timezone is used only to display
   times.
-- Original names, copy, layout and assets. No external fonts, scripts, or images.
+- Original names, copy, layout and assets. No external fonts or scripts. Game-tile artwork is
+  fetched once from the catalog (`cdn.myanimelist.net`) by our own server, cached on disk under
+  `.cache/images/`, and served forever from this site's origin via `/api/images/{kind}/{malId}` —
+  the browser never talks to any third-party host.

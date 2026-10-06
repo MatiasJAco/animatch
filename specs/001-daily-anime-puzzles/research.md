@@ -2,6 +2,12 @@
 
 Feature spec: [spec.md](./spec.md) · Constitution: v2.1.0
 
+> **Supersession note (2026-10-06, Constitution v3.0.0)**: R-009 below ("Clue card images without
+> artwork") is **superseded** by `specs/002-game-tile-images/research.md` R-001 (first-party
+> `/api/images/{kind}/{malId}` route). FR-029's CSS placeholder is retained as the fallback, and
+> FR-055 is superseded by the v3.0.0 amendment. SC-014 and spec 002's reconciliation table
+> (`specs/002-game-tile-images/research.md` R-012) keep the no-hotlink promise intact.
+
 Every unknown raised while drafting the technical context is resolved below. Each entry states the
 decision, the reason, and the alternatives that were weighed, so the choice can be revisited later
 without re-reading the code.
