@@ -1,20 +1,16 @@
 <!-- SYNC IMPACT REPORT (temporary; delete before committing)
-Version change: 2.0.0 -> 2.1.0
-Bump rationale: MINOR. Principle III is expanded with two obligations (UTC as the only project
-timezone; browser timezone restricted to display formatting), and the bilingual locale rule drops
-its regional pin. The day key was already UTC and stays UTC, so no date maps to a different day
-key and no principle is removed or redefined incompatibly. Prior v1.0.0 -> v2.0.0 was the MAJOR
-step that moved the day key off a regional zone onto UTC.
+Version change: 2.1.0 -> 3.0.0
+Bump rationale: MAJOR. The asset-origination constraint ("All artwork, fonts, and visual assets
+  MUST be original, properly licensed, or generated in project. No hotlinking and no scraped
+  images.") is removed. Removing an enforceable constraint is backward incompatible: behavior
+  that was previously forbidden (using third-party images, including anime-series imagery) is now
+  permitted, so prior reviews and plans gated on that rule are invalidated.
 Modified principles:
-  - III. One Deterministic Puzzle per UTC Day (expanded: UTC-only rule + browser-display-only rule)
-  - Additional Constraints, Bilingual UI (regional locale pin removed)
-  - Development Workflow and Quality Gates (one gate added, one gate expanded)
-  - Governance, versioning policy (timezone change named as a MAJOR trigger)
+  - Additional Constraints, Naming and Originality (originality/licensing bullet removed;
+    remaining bullets unchanged)
 Added sections: none
 Removed sections: none
-Follow-up TODOs: none. The prior regional timezone reference is now absent from this document
-  entirely, including this report. No puzzle rows exist yet (no application code in the repo), so
-  no data migration is required.
+Follow-up TODOs: none. No other section references the removed rule; quality gates do not cite it.
 -->
 
 # Animatch Constitution
@@ -143,8 +139,6 @@ exponential test suite. Caps keep review cost proportional to product value.
 - Branding, copy, layout, visual structure, and assets MUST NOT be copied from Futbol11 or any
   other puzzle site. Third-party anime data (MyAnimeList identifiers) may be referenced as data,
   never as presentation.
-- All artwork, fonts, and visual assets MUST be original, properly licensed, or generated in
-  project. No hotlinking and no scraped images.
 - Identifiers taken from the catalog (for example `mal_id`) are data references and MUST NOT
   appear in marketing copy or UI chrome.
 
@@ -212,4 +206,4 @@ Where a plan, spec, or task conflicts with it, the constitution wins.
 - Operational guidance (runtime configuration, environment variables, deployment) lives in
   project docs and MUST NOT weaken any principle above.
 
-**Version**: 2.1.0 | **Ratified**: 2026-10-02 | **Last Amended**: 2026-10-02
+**Version**: 3.0.0 | **Ratified**: 2026-10-02 | **Last Amended**: 2026-10-06
