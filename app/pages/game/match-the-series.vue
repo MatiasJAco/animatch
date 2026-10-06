@@ -11,6 +11,7 @@ import {
   type AttemptErrorCode,
 } from '~/composables/attemptFailure'
 import { useLocalProgress } from '~/composables/useLocalProgress'
+import { applyMatchAnswer, nextUnansweredIndex } from '~/utils/matchState'
 
 const { t } = useLocale()
 const progress = useLocalProgress()
@@ -65,18 +66,6 @@ const persist = (state: 'in_progress' | 'won' | 'lost', next: Partial<typeof gam
   })
 }
 
-const nextUnansweredIndex = (from: number): number => {
-  const clues = puzzle.value?.clues ?? []
-  const answered = new Set(answeredClues.value)
-  for (let step = 1; step <= clues.length; step += 1) {
-    const index = (from + step) % clues.length
-    if (!answered.has(clues[index].key)) {
-      return index
-    }
-  }
-  return from
-}
-
 const answer = async (seriesKey: string) => {
   const clue = currentClue.value
   if (busy.value || finished.value || !clue || !puzzle.value) {
@@ -104,69 +93,32 @@ const answer = async (seriesKey: string) => {
       return
     }
     const outcome = (await res.json()) as MatchTheSeriesOutcome
-
-    // FR-041: the device counts accepted answers. A rejected attempt changes nothing.
-    const counted = attempts.value + 1
-
-    if (outcome.result === 'hit') {
-      const green = greenSeries.value.includes(seriesKey)
-        ? greenSeries.value
-        : [...greenSeries.value, seriesKey]
-      const answered = [...answeredClues.value, clue.key]
-      const won = outcome.state === 'won'
-
-      // FR-026a: the next unanswered card loads itself once the answer resolves.
-      const advance = nextUnansweredIndex(clueIndex.value)
-      progress.setGameState('match_the_series', {
-        status: won ? 'won' : 'in_progress',
-        attempts: counted,
-        greenSeries: green,
-        answeredClues: answered,
-        greenPairs: greenPairs.value.some((pair) => pair.clueKey === clue.key)
-          ? greenPairs.value
-          : [...greenPairs.value, { clueKey: clue.key, seriesKey }],
-        clueIndex: won ? clueIndex.value : advance,
-        wrongClicks: wrongClicks.value,
-        ...(won ? { endedAt: new Date().toISOString() } : {}),
-      })
-      return
-    }
-
-    const misses = wrongClicks.value + 1
-    // The rejected pairing is recorded as evidence, so the next request can prove the count.
-    const logged = [...missLog.value, { clueKey: clue.key, seriesKey }]
-    if (outcome.state === 'lost') {
+    if (outcome.result === 'miss' && outcome.state === 'lost') {
       // FR-027: the ending miss reveals every pairing.
       revealed.value = 'answers' in outcome ? outcome.answers : null
-      progress.setGameState('match_the_series', {
-        status: 'lost',
-        attempts: counted,
-        greenSeries: greenSeries.value,
-        answeredClues: answeredClues.value,
-        missLog: logged,
-        clueIndex: clueIndex.value,
-        wrongClicks: misses,
-        endedAt: new Date().toISOString(),
-      })
-      return
     }
 
-    // FR-027a / FR-027c: nothing is disclosed below the limit, no request is made, and
-    // the card rotates to another eligible entity. The abandoned entity is not recorded
-    // as answered, so it stays in the pool and can come back (FR-027d, R-025).
-    // nextUnansweredIndex reuses the FR-026c predicate, so Next and the mistake cannot
-    // drift apart; it returns the same index when nothing else is eligible, which is
-    // FR-026d's continue-showing fallback.
-    const rotated = nextUnansweredIndex(clueIndex.value)
-    progress.setGameState('match_the_series', {
-      status: 'in_progress',
-      attempts: counted,
-      greenSeries: greenSeries.value,
-      answeredClues: answeredClues.value,
-      missLog: logged,
-      clueIndex: rotated,
-      wrongClicks: misses,
-    })
+    // The whole board lives in the device store, and setGameState replaces the entry
+    // wholesale, so every transition writes the complete state — including the two evidence
+    // lists the server re-derives the miss count and the green set from. Dropping them would
+    // silently let the mistake limit and the win condition slip (Constitution IV).
+    const next = applyMatchAnswer(
+      {
+        status: gameState.value?.status ?? 'in_progress',
+        attempts: attempts.value,
+        greenSeries: greenSeries.value,
+        answeredClues: answeredClues.value,
+        clueIndex: clueIndex.value,
+        wrongClicks: wrongClicks.value,
+        greenPairs: greenPairs.value,
+        missLog: missLog.value,
+        endedAt: gameState.value?.endedAt,
+      },
+      puzzle.value.clues,
+      outcome,
+      { clueKey: clue.key, seriesKey },
+    )
+    progress.setGameState('match_the_series', next)
   } catch {
     lastSeriesKey.value = seriesKey
     attemptError.value = 'DATABASE_UNAVAILABLE'
@@ -189,7 +141,11 @@ const skip = () => {
   if (finished.value || !puzzle.value) {
     return
   }
-  const index = nextUnansweredIndex(clueIndex.value)
+  const index = nextUnansweredIndex(
+    puzzle.value.clues,
+    answeredClues.value,
+    clueIndex.value,
+  )
   if (index === clueIndex.value) {
     return
   }
