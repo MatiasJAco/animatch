@@ -1,0 +1,203 @@
+openapi: 3.1.0
+info:
+  title: Animatch Groups contract (feature 003)
+  version: "1.0.0"
+  description: |
+    Reference copy of the two Groups endpoints from
+    specs/001-daily-anime-puzzles/contracts/openapi.yaml.
+
+    Feature 003-groups-board-layout is a presentation-only change and does NOT alter this
+    contract: the browser sends the same tile proposals, found groups, and miss log, and the
+    server answers with the same hit/miss/lost shapes. The new behavior — found groups persisted
+    as green rows and a loss-layout reveal as red rows — is derived client-side from these
+    existing responses (see research R-001, R-007 and data-model.md §2).
+
+servers:
+  - url: /
+    description: Same origin as the site.
+
+paths:
+  /api/daily/groups:
+    get:
+      operationId: getGroupsPuzzle
+      summary: Today's Groups puzzle (unchanged by feature 003)
+      description: |
+        One deterministic puzzle per UTC day. The payload contains the 16 tiles (image kind + id
+        derived from each tile key client-side, as in feature 002) and the mistake limit.
+      responses:
+        "200":
+          description: The day's groups puzzle payload and stores state.
+        "404":
+          $ref: "#/components/responses/UnknownGame"
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+
+  /api/daily/groups/attempt:
+    post:
+      operationId: submitGroupsAttempt
+      summary: Resolve a four-tile proposal (unchanged by feature 003)
+      description: |
+        The client sends tileKeys, the foundGroups it already holds, and its missLog — evidence
+        the server verifies against the stored solution (Constitution IV). A hit returns the
+        group criterion and tileKeys; a miss below the limit returns only the overlap count; the
+        ending miss (fifth mistake) returns the full groups mapping, which the client renders as
+        the red-row reveal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tileKeys]
+              properties:
+                tileKeys:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 4
+                  maxItems: 4
+                  description: The four tiles proposed as one group.
+                foundGroups:
+                  type: array
+                  items:
+                    type: array
+                    items:
+                      type: string
+                  description: Already-found groups, presented as evidence.
+                missLog:
+                  type: array
+                  items:
+                    type: array
+                    items:
+                      type: string
+                  description: Rejected proposals, presented as evidence.
+      responses:
+        "200":
+          description: Attempt outcome; GroupsOutcome oneOf as in feature 001.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupsOutcome"
+              examples:
+                groupsHit:
+                  summary: Correct group, criterion disclosed; client adds a green row
+                  value:
+                    result: hit
+                    tileKeys: ["c:1@a:9", "c:2@a:9", "c:3@a:9", "c:4@a:9"]
+                    criterion: { type: same_anime, animeId: 9 }
+                    remainingGroups: 3
+                    state: in_progress
+                groupsMiss:
+                  summary: Wrong group, overlap hint only
+                  value:
+                    result: miss
+                    tileKeys: ["c:1@a:9", "c:2@a:9", "c:9@a:1", "c:8@a:2"]
+                    overlap: 2
+                    remainingGroups: 4
+                    state: in_progress
+                groupsLost:
+                  summary: Ending miss discloses every group; client renders the red rows
+                  value:
+                    result: miss
+                    tileKeys: ["c:1@a:9", "c:2@a:9", "c:9@a:1", "c:8@a:2"]
+                    groups:
+                      - keys: ["c:1@a:9", "c:2@a:9", "c:3@a:9", "c:4@a:9"]
+                        criterion: { type: same_anime, animeId: 9 }
+                      - keys: ["c:5@a:1", "c:6@a:1", "c:7@a:1", "c:8@a:1"]
+                        criterion: { type: same_season, season: fall, year: 2026 }
+                      - keys: ["c:9@a:2", "c:10@a:2", "c:11@a:2", "c:12@a:2"]
+                        criterion: { type: same_language, language: ja }
+                      - keys: ["c:13@a:4", "c:14@a:4", "c:15@a:4", "c:16@a:4"]
+                        criterion: { type: same_voice_actor, personId: 9001 }
+                    state: lost
+        "400":
+          $ref: "#/components/responses/InvalidAttempt"
+        "404":
+          $ref: "#/components/responses/UnknownGame"
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+
+components:
+  responses:
+    InvalidAttempt:
+      description: A rejected proposal — wrong tile count, unknown key, duplicate, or an
+        already-consumed tile. None of these change game state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    UnknownGame:
+      description: The game identifier is not one of the three v1 games.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    DatabaseUnavailable:
+      description: The catalog or game store is unreachable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+
+  schemas:
+    GroupsOutcome:
+      oneOf:
+        - type: object
+          required: [result, tileKeys, criterion, remainingGroups, state]
+          properties:
+            result:
+              type: string
+              enum: [hit]
+            state:
+              type: string
+              enum: [in_progress, won]
+        - type: object
+          required: [result, tileKeys, overlap, remainingGroups, state]
+          properties:
+            result:
+              type: string
+              enum: [miss]
+            overlap:
+              type: integer
+            state:
+              type: string
+              enum: [in_progress]
+        - type: object
+          required: [result, tileKeys, groups, state]
+          properties:
+            result:
+              type: string
+              enum: [miss]
+            groups:
+              type: array
+              items:
+                type: object
+                required: [keys, criterion]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: string
+                    minItems: 4
+                    maxItems: 4
+                  criterion:
+                    type: object
+            state:
+              type: string
+              enum: [lost]
+      description: |
+        hit carries the criterion (client renders a green row); the lost miss carries the full
+        groups mapping (client renders found rows green + the rest red). Both shapes are exactly
+        feature 001's contract.
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

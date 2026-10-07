@@ -259,6 +259,54 @@ a {
   gap: 0.4rem;
 }
 
+/* Feature 003: found groups stay on the board as a permanent horizontal green row, and a loss
+   reveals the remaining groups as red rows in the same layout. The criterion label sits at the
+   left end of each row; color is never the only signal (the label is always present). */
+.group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.group-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+}
+
+.group-row--found {
+  border-color: var(--correct);
+}
+
+.group-row--revealed {
+  border-color: var(--wrong);
+}
+
+.group-row__criterion {
+  flex: 0 0 5rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  color: var(--correct);
+}
+
+.group-row--revealed .group-row__criterion {
+  color: var(--wrong);
+}
+
+.group-row__tile {
+  flex: 0 0 5.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
 /* FR-024: exactly one grid of three by three current-season series. */
 .grid-3x3 {
   display: grid;

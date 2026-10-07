@@ -556,8 +556,7 @@ unchanged.
   the same season, the same voice language, or the same voice actor.
 - **FR-033**: The visitor MUST be able to select up to four tiles and submit them as a group
   proposal.
-- **FR-034**: A correct proposal MUST remove those tiles from the board and reveal the shared
-  criterion.
+- **FR-034**: A correct proposal MUST arrange those four tiles into a permanent horizontal row on the board showing the group's shared criterion, and they must remain visible until the game ends. The tiles in that row are no longer selectable.
 - **FR-035**: Five incorrect proposals MUST end the game immediately and reveal the four correct
   groups.
 - **FR-035a**: A proposal that is not a correct group MUST report how many of the submitted tiles

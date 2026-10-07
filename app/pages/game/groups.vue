@@ -69,15 +69,17 @@ const handleOutcome = (
     <div v-else-if="pending || !puzzle">
       <p>{{ t('common.loading') }}</p>
     </div>
+    <!-- Feature 003: the board stays mounted so a finished game keeps its rows visible — the
+         loss layout is a reveal of remaining groups, never a swap to a bare result card. -->
     <ResultPanel
-      v-else-if="finished"
+      v-if="finished"
       game="groups"
       :state="gameState?.status === 'won' ? 'won' : 'lost'"
       :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
     />
     <GroupsBoard
-      v-else
       :puzzle="puzzle"
+      :initial-status="(gameState?.status ?? 'in_progress') as never"
       :initial-mistakes="gameState?.mistakes ?? 0"
       :initial-attempts="gameState?.attempts ?? 0"
       :initial-found="(gameState?.foundGroups as never) ?? []"

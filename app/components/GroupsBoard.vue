@@ -6,6 +6,7 @@ import type {
   GroupsPayloadData,
 } from '~~/server/game/groups'
 import { GROUPS_GROUP_SIZE } from '~~/server/game/groups'
+import { buildBoardRows } from '~/utils/groupsBoard'
 import { entityImageId } from '~/utils/entityImage'
 import { useLocale } from '~/composables/useLocale'
 import {
@@ -16,6 +17,7 @@ import {
 
 const props = defineProps<{
   puzzle: GroupsPayloadData
+  initialStatus?: 'won' | 'lost' | 'in_progress'
   initialFound?: Array<{ keys: string[]; criterion: GroupCriterion }>
   initialMissLog?: string[][]
   initialMistakes?: number
@@ -43,7 +45,7 @@ const missLog = ref<string[][]>(props.initialMissLog ?? [])
 const mistakes = ref(props.initialMistakes ?? 0)
 const attempts = ref(props.initialAttempts ?? 0)
 const busy = ref(false)
-const finished = ref(false)
+const finished = ref(props.initialStatus === 'won' || props.initialStatus === 'lost')
 const revealed = ref<Array<{ keys: string[]; criterion: GroupCriterion }> | null>(null)
 const feedback = ref<GroupsOutcome | null>(null)
 // Principle V: a rejected or failed attempt is a visible state with a retry.
@@ -148,21 +150,16 @@ const retry = () => {
 
 const criterionLabel = (criterion: GroupCriterion) => t(`groups.criterion.${criterion.type}`)
 
-const groupByKey = (key: string) => {
-  if (found.value.some((group) => group.keys.includes(key))) {
-    return found.value.find((group) => group.keys.includes(key)) as (typeof found.value)[number]
-  }
-  return revealed.value?.find((group) => group.keys.includes(key)) ?? null
-}
+// FR-034: the board presentation derives from the existing found/reveal state: found groups
+// become permanent green rows, a loss adds red rows for the groups never found (feature 003).
+const board = computed(() => buildBoardRows(props.puzzle.tiles, found.value, revealed.value))
+const rows = computed(() => board.value.rows)
+const tileByKey = (key: string) => props.puzzle.tiles.find((tile) => tile.key === key)
 
-const isFound = (key: string) => Boolean(groupByKey(key))
-
-// FR-034: a correctly proposed group leaves the board. FR-035: once the game ends, the
-// board comes back in full so the four correct groups and their shared fact are visible.
 const visibleTiles = computed(() =>
-  revealed.value
-    ? props.puzzle.tiles
-    : props.puzzle.tiles.filter((tile) => !consumed.value.has(tile.key)),
+  board.value.selectable
+    .map((key) => tileByKey(key))
+    .filter((tile): tile is typeof tile => Boolean(tile)),
 )
 </script>
 
@@ -188,14 +185,34 @@ const visibleTiles = computed(() =>
       :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
     />
 
-    <div class="grid-4x4">
+    <div class="group-rows">
+      <div
+        v-for="(row, rowIndex) in rows"
+        :key="rowIndex"
+        class="group-row"
+        :class="row.kind === 'revealed' ? 'group-row--revealed' : 'group-row--found'"
+      >
+        <span class="group-row__criterion">{{ criterionLabel(row.criterion) }}</span>
+        <span v-for="tileKey in row.tileKeys" :key="tileKey" class="group-row__tile">
+          <EntityImage
+            class="tile__art"
+            :kind="tileByKey(tileKey)?.kind"
+            :id="tileByKey(tileKey) ? entityImageId(tileByKey(tileKey)!.kind, tileKey) : undefined"
+            :name="tileByKey(tileKey)?.name ?? ''"
+          />
+          <span class="tile__label">{{ tileByKey(tileKey)?.name }}</span>
+        </span>
+      </div>
+    </div>
+
+    <div v-if="!finished" class="grid-4x4">
       <button
         v-for="tile in visibleTiles"
         :key="tile.key"
         type="button"
         class="tile"
         :aria-pressed="selection.includes(tile.key)"
-        :disabled="busy || finished || isFound(tile.key)"
+        :disabled="busy || finished"
         @click="toggle(tile.key)"
       >
         <EntityImage
@@ -205,13 +222,10 @@ const visibleTiles = computed(() =>
           :name="tile.name"
         />
         <span class="tile__label">{{ tile.name }}</span>
-        <span v-if="isFound(tile.key)" class="tile__label">
-          {{ criterionLabel(groupByKey(tile.key)?.criterion as GroupCriterion) }}
-        </span>
       </button>
     </div>
 
-    <div class="row">
+    <div v-if="!finished" class="row">
       <button type="button" class="button button--ghost" :disabled="busy" @click="clear">
         {{ t('groups.clear') }}
       </button>
