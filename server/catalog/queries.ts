@@ -6,8 +6,9 @@ export type ImageKind = 'anime' | 'character' | 'person'
 
 // Every catalog query in this module is hand-written and restricts to the allowed facts:
 // person name, character name, anime title, anime type, anime year, anime season,
-// voice language, voice role, and the single artwork reference (image_url) that the
-// server-side image route resolves. No favorites, biography, or import table is ever read.
+// voice language, voice role, anime source material, and the single artwork reference
+// (image_url) that the server-side image route resolves. No favorites, biography, or import
+// table is ever read.
 
 export interface PeopleRow {
   mal_id: number
@@ -301,14 +302,16 @@ export async function fetchAnimeSeasonById(
 }
 
 // Groups candidate tiles: characters whose linkage fields are already pinned to the anime,
-// language, and voice actor they are judged on. Only the eight allowed facts are read; no image
-// column and no duplicated label is ever returned (FR-031, FR-032, R-011, R-013).
+// source material, language, and voice actor they are judged on. Only the nine allowed facts
+// are read; no image column and no duplicated label is ever returned (FR-031, FR-032, R-011,
+// R-013).
 
 export interface GroupCandidateTile {
   kind: 'character'
   id: number
   name: string
   animeId: number
+  source: string
   language: string
   voiceActorId: number
 }
@@ -330,10 +333,13 @@ export async function fetchSameAnimePools(limit = 200): Promise<SameAnimePool[]>
     name: string
     language: string
     person_mal_id: number
+    source: string
   }>(
-    `SELECT r.anime_mal_id, r.character_mal_id, c.name, r.language, r.person_mal_id
+    `SELECT r.anime_mal_id, r.character_mal_id, c.name, r.language, r.person_mal_id,
+            COALESCE(a.source, '') AS source
      FROM voice_roles r
      JOIN characters c ON c.mal_id = r.character_mal_id
+     JOIN anime a ON a.mal_id = r.anime_mal_id
      WHERE btrim(r.language) <> ''
      ORDER BY r.anime_mal_id, r.character_mal_id, r.person_mal_id, r.language
      LIMIT $1`,
@@ -357,6 +363,7 @@ export async function fetchSameAnimePools(limit = 200): Promise<SameAnimePool[]>
       id: row.character_mal_id,
       name: row.name,
       animeId: row.anime_mal_id,
+      source: row.source,
       language: row.language,
       voiceActorId: row.person_mal_id,
     })
@@ -390,11 +397,14 @@ export async function fetchSameSeasonPool(
     anime_mal_id: number
     language: string
     person_mal_id: number
+    source: string
   }>(
-    `SELECT r.character_mal_id, c.name, r.anime_mal_id, r.language, r.person_mal_id
+    `SELECT r.character_mal_id, c.name, r.anime_mal_id, r.language, r.person_mal_id,
+            COALESCE(a.source, '') AS source
      FROM voice_roles r
      JOIN characters c ON c.mal_id = r.character_mal_id
      JOIN anime_seasons s ON s.anime_mal_id = r.anime_mal_id
+     JOIN anime a ON a.mal_id = r.anime_mal_id
      WHERE s.year = $1
        AND lower(trim(s.season)) = lower(trim($2))
        AND btrim(r.language) <> ''
@@ -417,6 +427,7 @@ export async function fetchSameSeasonPool(
       id: row.character_mal_id,
       name: row.name,
       animeId: row.anime_mal_id,
+      source: row.source,
       language: row.language,
       voiceActorId: row.person_mal_id,
     })
@@ -427,55 +438,56 @@ export async function fetchSameSeasonPool(
   return tiles
 }
 
-/** Characters sharing one anime and one non-empty voice language. */
-export async function fetchSameLanguagePools(limit = 200): Promise<
-  Array<{ criterion: 'same_language'; animeId: number; language: string; tiles: GroupCandidateTile[] }>
+/** Characters across distinct anime whose anime share one non-blank source material. */
+export async function fetchSameSourcePools(limit = 200): Promise<
+  Array<{ criterion: 'same_source'; source: string; tiles: GroupCandidateTile[] }>
 > {
+  // No LIMIT: the source set is tiny (~13 distinct non-blank values), so every source must be
+  // read or the smaller ones sorted after Manga would be truncated and lose board availability.
   const { rows } = await getPool().query<{
-    anime_mal_id: number
-    language: string
+    source: string
     character_mal_id: number
     name: string
+    anime_mal_id: number
+    language: string
     person_mal_id: number
   }>(
-    `SELECT r.anime_mal_id, r.language, r.character_mal_id, c.name, r.person_mal_id
+    `SELECT btrim(a.source) AS source, r.character_mal_id, c.name, r.anime_mal_id,
+            r.language, r.person_mal_id
      FROM voice_roles r
      JOIN characters c ON c.mal_id = r.character_mal_id
-     WHERE btrim(r.language) <> ''
-     ORDER BY r.anime_mal_id, r.language, r.character_mal_id, r.person_mal_id
-     LIMIT $1`,
-    [limit * 40],
+     JOIN anime a ON a.mal_id = r.anime_mal_id
+     WHERE btrim(a.source) <> '' AND btrim(r.language) <> ''
+     ORDER BY btrim(a.source), r.character_mal_id, r.anime_mal_id, r.person_mal_id, r.language`,
   )
 
-  const byKey = new Map<string, GroupCandidateTile[]>()
-  const meta = new Map<string, { animeId: number; language: string }>()
+  const bySource = new Map<string, GroupCandidateTile[]>()
   for (const row of rows) {
-    const key = `${row.anime_mal_id} ${row.language}`
-    const list = byKey.get(key) ?? []
+    const list = bySource.get(row.source) ?? []
     if (row.name.trim() !== '' && !list.some((tile) => tile.id === row.character_mal_id)) {
       list.push({
         kind: 'character',
         id: row.character_mal_id,
         name: row.name,
         animeId: row.anime_mal_id,
+        source: row.source,
         language: row.language,
         voiceActorId: row.person_mal_id,
       })
-      byKey.set(key, list)
-      meta.set(key, { animeId: row.anime_mal_id, language: row.language })
+      bySource.set(row.source, list)
     }
   }
 
   const pools: Array<{
-    criterion: 'same_language'
-    animeId: number
-    language: string
+    criterion: 'same_source'
+    source: string
     tiles: GroupCandidateTile[]
   }> = []
-  for (const [key, tiles] of [...byKey.entries()].sort()) {
-    if (tiles.length >= 4) {
-      const info = meta.get(key) as { animeId: number; language: string }
-      pools.push({ criterion: 'same_language', ...info, tiles })
+  for (const [source, tiles] of [...bySource.entries()].sort()) {
+    // FR-003: distinct anime are required so the group is never a hidden "same anime" group.
+    const distinctAnime = new Set(tiles.map((tile) => tile.animeId)).size
+    if (tiles.length >= 4 && distinctAnime >= 4) {
+      pools.push({ criterion: 'same_source', source, tiles })
     }
     if (pools.length >= limit) {
       break
@@ -494,10 +506,13 @@ export async function fetchSameVoiceActorPools(limit = 200): Promise<
     name: string
     anime_mal_id: number
     language: string
+    source: string
   }>(
-    `SELECT r.person_mal_id, r.character_mal_id, c.name, r.anime_mal_id, r.language
+    `SELECT r.person_mal_id, r.character_mal_id, c.name, r.anime_mal_id, r.language,
+            COALESCE(a.source, '') AS source
      FROM voice_roles r
      JOIN characters c ON c.mal_id = r.character_mal_id
+     JOIN anime a ON a.mal_id = r.anime_mal_id
      WHERE btrim(r.language) <> ''
      ORDER BY r.person_mal_id, r.character_mal_id, r.anime_mal_id, r.language
      LIMIT $1`,
@@ -513,6 +528,7 @@ export async function fetchSameVoiceActorPools(limit = 200): Promise<
         id: row.character_mal_id,
         name: row.name,
         animeId: row.anime_mal_id,
+        source: row.source,
         language: row.language,
         voiceActorId: row.person_mal_id,
       })

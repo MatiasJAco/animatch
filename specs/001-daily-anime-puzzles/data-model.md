@@ -284,7 +284,7 @@ abandoned card is still in the pool.
 ## 6. Groups
 
 **Concept**: 16 tiles forming exactly four hidden groups of four. Each group shares one allowed
-fact: same anime, same season, same language, or same voice actor.
+fact: same anime, same season, same source material, or same voice actor.
 
 **Tile fact**: every tile is a fact with its linkage fields pinned, so each criterion is a function
 of stored fields (R-011).
@@ -296,14 +296,15 @@ type GroupTile = {
   id: number                     // characters.mal_id or people.mal_id
   name: string                   // display name only
   animeId: number                // pins the anime, so same-anime and same-season are well defined
-  language: string | null        // pins the language, so same-language is well defined
-  voiceActorId: number | null    // set on character tiles whose role's person is the group's actor
+  source: string                 // pins the anime's source material, so same-source is well defined
+  language: string               // pinned for data completeness; no criterion is judged on it
+  voiceActorId: number           // set on character tiles whose role's person is the group's actor
 }
 
 type Criterion =
   | { type: 'same_anime';      animeId: number }
   | { type: 'same_season';     season: string; year: number }
-  | { type: 'same_language';   animeId: number; language: string }
+  | { type: 'same_source';     source: string }
   | { type: 'same_voice_actor'; personId: number }
 ```
 
@@ -314,7 +315,7 @@ seeded PRNG:
 |-----------|------------------|-------|
 | same_anime | characters with a voice role in one anime | ≥ 4 distinct characters required |
 | same_season | characters with roles in anime of one (year, season) | ≥ 4 distinct characters, distinct anime ids |
-| same_language | characters with roles in one anime sharing one non-empty `language` | blank `language` (`''` is the column default) is never eligible |
+| same_source | characters across distinct anime whose anime share one non-blank `source` | ≥ 4 distinct characters across ≥ 4 distinct anime; blank `source` is never eligible |
 | same_voice_actor | characters voiced by one person | ≥ 4 distinct characters |
 
 1. Build one candidate group per criterion type.

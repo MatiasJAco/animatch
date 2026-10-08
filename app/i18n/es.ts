@@ -58,7 +58,7 @@ export const es = {
   'groups.clear': 'Borrar selección',
   'groups.criterion.same_anime': 'la misma serie',
   'groups.criterion.same_season': 'la misma temporada',
-  'groups.criterion.same_language': 'el mismo idioma de doblaje',
+  'groups.criterion.same_source': 'el mismo material de origen',
   'groups.criterion.same_voice_actor': 'el mismo actor de voz',
   'groups.error.title': 'Algo salió mal',
   'groups.error.retry': 'Reintentar',

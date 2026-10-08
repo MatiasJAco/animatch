@@ -9,7 +9,7 @@ info:
       - The date in every response is a civil UTC date (YYYY-MM-DD). The day rolls over at 00:00 UTC.
       - No response ever contains the stored solution for a puzzle. Answers are disclosed only
         through attempt responses.
-      - Catalog ids are opaque integers. No catalog field outside the eight allowed facts is exposed,
+      - Catalog ids are opaque integers. No catalog field outside the nine allowed facts is exposed,
         and no image URL is ever returned or fetched.
       - Errors always use the same envelope: a machine code the client localizes, plus a short
         non-technical English fallback. The server never decides the visitor's language.
@@ -538,11 +538,11 @@ components:
           type: object
           description: Present on a hit. The revealed shared fact.
           properties:
-            type: { type: string, enum: [same_anime, same_season, same_language, same_voice_actor] }
+            type: { type: string, enum: [same_anime, same_season, same_source, same_voice_actor] }
             animeId: { type: integer }
             season: { type: string }
             year: { type: integer }
-            language: { type: string }
+            source: { type: string }
             personId: { type: integer }
         overlap:
           type: integer

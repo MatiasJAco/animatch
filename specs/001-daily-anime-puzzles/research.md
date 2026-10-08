@@ -350,14 +350,15 @@ fall 2026, so the error state is now a genuine catalog gap rather than an expect
 | Anime season | `anime_seasons.season` |
 | Voice language | `voice_roles.language` |
 | Voice role | `voice_roles.role` (unused as a grouping criterion in v1) |
+| Anime source material | `anime.source` (title's adaptation source; top-ranked in `anime` table) |
 
 Never selected: `people.favorites`, `people.about`, `people.alternate_names`, `people.birthday`,
-`people.website_url`, `people.mal_url`, `anime.source`, `anime.episodes`, `anime.status`,
+`people.website_url`, `people.mal_url`, `anime.episodes`, `anime.status`,
 `anime.aired_from`, `anime.aired_to`, `anime.title_english`, `anime.title_japanese`,
 `characters.name_kanji`, and every `raw_json` column. The `first_seen_at` / `updated_at` columns are
 ignored.
 
-**Rationale**: `docs/catalog-schema.sql` shows the catalog holds far more than the eight allowed
+**Rationale**: `docs/catalog-schema.sql` shows the catalog holds far more than the nine allowed
 facts, including three `image_url` columns, a favorites count, and biography text. FR-009 and
 FR-055 forbid presenting any of it. Choosing the allow-list at the query level rather than at the
 render level means a forbidden field cannot leak even by accident, and it is directly testable.

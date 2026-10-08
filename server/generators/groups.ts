@@ -1,8 +1,9 @@
 import {
   fetchAnimeSeasonById,
+  fetchCurrentSeasonSeries,
   fetchSameAnimePools,
-  fetchSameLanguagePools,
   fetchSameSeasonPool,
+  fetchSameSourcePools,
   fetchSameVoiceActorPools,
   type GroupCandidateTile,
 } from '../catalog/queries'
@@ -55,8 +56,10 @@ function holds(tile: GroupCandidateTile, check: BoardCriterion): boolean {
   switch (check.criterion.type) {
     case 'same_anime':
       return tile.animeId === check.criterion.animeId
-    case 'same_language':
-      return tile.animeId === check.criterion.animeId && tile.language === check.criterion.language
+    case 'same_source':
+      // The tile is judged by its own pinned source material (research R-005); sharing an
+      // anime or a language never suffices.
+      return tile.source === check.criterion.source
     case 'same_voice_actor':
       return tile.voiceActorId === check.criterion.personId
     case 'same_season': {
@@ -140,14 +143,46 @@ export async function generateGroups(
   puzzleDate: PuzzleDate,
   season: { season: string; year: number },
 ): Promise<{ payload: PayloadWithSignature; solution: GroupsSolution }> {
-  const [animePools, seasonTiles, languagePools, actorPools] = await Promise.all([
+  const [animePools, seasonTiles, rawSourcePools, actorPools] = await Promise.all([
     fetchSameAnimePools(),
     fetchSameSeasonPool(season.year, season.season),
-    fetchSameLanguagePools(),
+    fetchSameSourcePools(),
     fetchSameVoiceActorPools(),
   ])
 
   const seasonMap = new Map(seasonTiles.map((tile) => [tile.animeId, { season: season.season, year: season.year }]))
+
+  // Availability (R-007): the season group owns the airing season. A tile drawn from a same-season
+  // anime by any other group would make the board admit extra same_season subsets and fail the
+  // exactly-four gate, so the source, anime, and actor pools drop currently-airing anime — and the
+  // too-thin survivors — before any candidate is made.
+  const seasonSeries = await fetchCurrentSeasonSeries(season.year, season.season)
+  const currentSeasonIds = new Set(seasonSeries.map((series) => series.anime_mal_id))
+  const cutSeason = <P extends { tiles: GroupCandidateTile[] }>(pool: P): P | null => {
+    const tiles = pool.tiles.filter((tile) => !currentSeasonIds.has(tile.animeId))
+    return tiles.length >= GROUPS_GROUP_SIZE ? { ...pool, tiles } : null
+  }
+  const eligibleAnimePools = animePools.map(cutSeason).filter((p): p is NonNullable<typeof p> => p !== null)
+  const eligibleActorPools = actorPools.map(cutSeason).filter((p): p is NonNullable<typeof p> => p !== null)
+  // R-004: a source group must also span four distinct anime, never a hidden same-anime group.
+  const sourcePools = rawSourcePools
+    .map(cutSeason)
+    .filter(
+      (p): p is NonNullable<typeof p> =>
+        p !== null && new Set(p.tiles.map((tile) => tile.animeId)).size >= GROUPS_GROUP_SIZE,
+    )
+  if (sourcePools.length === 0 || eligibleAnimePools.length === 0 || eligibleActorPools.length === 0) {
+    throw new PuzzleUnavailableError('no source pool survives the current-season cut')
+  }
+
+  // R-007: candidate source pools are attempted smallest-footprint-first, so the niche sources
+  // (which clear the exactly-one-subset gate) are used before the large ones are ever needed.
+  const sourceFootprint = (pool: { tiles: GroupCandidateTile[] }) =>
+    new Set(pool.tiles.map((tile) => tile.animeId)).size
+  const sortedSourcePools = [...sourcePools].sort((a, b) => {
+    const byFootprint = sourceFootprint(a) - sourceFootprint(b)
+    return byFootprint !== 0 ? byFootprint : a.source < b.source ? -1 : a.source > b.source ? 1 : 0
+  })
 
   const recent = await fetchRecentSignatures(game, puzzleDate)
   const daySeed = computePuzzleSignature(game, puzzleDate)
@@ -155,36 +190,68 @@ export async function generateGroups(
   for (let attempt = 0; attempt < MAX_NOVELTY_RETRIES; attempt += 1) {
     const prng = createPrngFromSeed(attempt === 0 ? daySeed : sha256Hex(`${daySeed}:${attempt}`))
 
-    // One candidate group per criterion type, chosen deterministically from its pool.
-    const animePool = animePools[Math.floor(prng() * animePools.length)]
-    const languagePool = languagePools[Math.floor(prng() * languagePools.length)]
-    const actorPool = actorPools[Math.floor(prng() * actorPools.length)]
-    if (!animePool || !languagePool || !actorPool || seasonTiles.length < GROUPS_GROUP_SIZE) {
+    // One candidate group per criterion type, chosen deterministically from its pool. The anime,
+    // season, and actor groups are drawn first so their twelve tiles pin down which sources must
+    // stay off the board (R-007).
+    const animePool = eligibleAnimePools[Math.floor(prng() * eligibleAnimePools.length)]
+    const actorPool = eligibleActorPools[Math.floor(prng() * eligibleActorPools.length)]
+    if (!animePool || !actorPool || seasonTiles.length < GROUPS_GROUP_SIZE) {
       throw new PuzzleUnavailableError('the catalog cannot fill four groups')
+    }
+
+    const animePick = pickFour(shuffle(animePool.tiles, prng), prng)
+    const seasonPick = pickFour(shuffle(seasonTiles, prng), prng)
+    const actorPick = pickFour(shuffle(actorPool.tiles, prng), prng)
+    const otherTiles = [...animePick, ...seasonPick, ...actorPick]
+    const pickedKeys = new Set(otherTiles.map(toKey))
+    const presentSources = new Set(otherTiles.map((tile) => tile.source))
+
+    // Smallest-footprint-first among the pools whose source is absent from the other twelve tiles:
+    // a golden source that also appears there would admit extra same_source subsets. A candidate
+    // whose tiles collide with a picked key is unusable, and a source tile voiced by the actor
+    // under test would make that subset ambiguous. The gate still re-verifies the whole board.
+    let chosen: { pool: (typeof sortedSourcePools)[number]; tiles: GroupCandidateTile[] } | undefined
+    for (const pool of sortedSourcePools) {
+      if (presentSources.has(pool.source)) {
+        continue
+      }
+      const tiles = pool.tiles.filter(
+        (tile) => !pickedKeys.has(toKey(tile)) && tile.voiceActorId !== actorPool.personId,
+      )
+      if (
+        tiles.length >= GROUPS_GROUP_SIZE &&
+        new Set(tiles.map((tile) => tile.animeId)).size >= GROUPS_GROUP_SIZE
+      ) {
+        chosen = { pool, tiles }
+        break
+      }
+    }
+    if (!chosen) {
+      continue
     }
 
     const proposed: GroupsSolutionGroup[] = [
       {
-        keys: pickFour(shuffle(animePool.tiles, prng), prng).map(toKey),
+        keys: animePick.map(toKey),
         criterion: { type: 'same_anime', animeId: animePool.animeId },
       },
       {
-        keys: pickFour(shuffle(seasonTiles, prng), prng).map(toKey),
+        keys: seasonPick.map(toKey),
         criterion: { type: 'same_season', season: season.season, year: season.year },
       },
       {
-        keys: pickFour(shuffle(languagePool.tiles, prng), prng).map(toKey),
+        keys: pickFour(shuffle(chosen.tiles, prng), prng).map(toKey),
         criterion: {
-          type: 'same_language',
-          animeId: languagePool.animeId,
-          language: languagePool.language,
+          type: 'same_source',
+          source: chosen.pool.source,
         },
       },
       {
-        keys: pickFour(shuffle(actorPool.tiles, prng), prng).map(toKey),
+        keys: actorPick.map(toKey),
         criterion: { type: 'same_voice_actor', personId: actorPool.personId },
       },
     ]
+    const sourcePool = chosen.pool
 
     // FR-037: no repeated tile key and no repeated display label anywhere on the board.
     const allKeys = proposed.flatMap((group) => group.keys)
@@ -192,7 +259,7 @@ export async function generateGroups(
       continue
     }
     const tileByKey = new Map<string, GroupCandidateTile>()
-    for (const pool of [animePool.tiles, languagePool.tiles, actorPool.tiles, seasonTiles]) {
+    for (const pool of [animePool.tiles, sourcePool.tiles, actorPool.tiles, seasonTiles]) {
       for (const tile of pool) {
         tileByKey.set(toKey(tile), tile)
       }

@@ -58,7 +58,7 @@ export const en = {
   'groups.clear': 'Clear selection',
   'groups.criterion.same_anime': 'the same anime',
   'groups.criterion.same_season': 'the same season',
-  'groups.criterion.same_language': 'the same voice language',
+  'groups.criterion.same_source': 'the same source material',
   'groups.criterion.same_voice_actor': 'the same voice actor',
   'groups.error.title': 'Something went wrong',
   'groups.error.retry': 'Try again',

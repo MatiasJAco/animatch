@@ -19,7 +19,7 @@ const GROUP = (
 const ALL: GroupCriterion[] = [
   { type: 'same_anime', animeId: 1 },
   { type: 'same_season', season: 'fall', year: 2026 },
-  { type: 'same_language', animeId: 2, language: 'ja' },
+  { type: 'same_source', source: 'Manga' },
   { type: 'same_voice_actor', personId: 9001 },
 ]
 

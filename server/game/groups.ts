@@ -14,7 +14,7 @@ export interface GroupsTile {
 export type GroupCriterion =
   | { type: 'same_anime'; animeId: number }
   | { type: 'same_season'; season: string; year: number }
-  | { type: 'same_language'; animeId: number; language: string }
+  | { type: 'same_source'; source: string }
   | { type: 'same_voice_actor'; personId: number }
 
 export interface GroupsPayloadData {

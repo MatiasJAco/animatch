@@ -1,16 +1,17 @@
 openapi: 3.1.0
 info:
-  title: Animatch Groups contract (feature 003)
+  title: Animatch Groups contract (feature 005)
   version: "1.0.0"
   description: |
     Reference copy of the two Groups endpoints from
-    specs/001-daily-anime-puzzles/contracts/openapi.yaml.
+    specs/001-daily-anime-puzzles/contracts/openapi.yaml, updated for feature
+    005-replace-same-language-group.
 
-    Feature 003-groups-board-layout is a presentation-only change and does NOT alter this
-    contract: the browser sends the same tile proposals, found groups, and miss log, and the
-    server answers with the same hit/miss/lost shapes. The new behavior — found groups persisted
-    as green rows and a loss-layout reveal as red rows — is derived client-side from these
-    existing responses (see research R-001, R-007 and data-model.md §2).
+    This feature removes the same_language criterion from Groups and replaces it with
+    same_source (shared anime source material, e.g. "Manga" or "Web novel"). The wire contract
+    is unchanged: tiles carry only { key, kind, name } and the criterion is disclosed only on a
+    hit or the ending miss. The only difference is the set of criterion `type` values the server
+    can emit (research R-005, data-model §1).
 
 servers:
   - url: /
@@ -20,13 +21,14 @@ paths:
   /api/daily/groups:
     get:
       operationId: getGroupsPuzzle
-      summary: Today's Groups puzzle (unchanged by feature 003)
+      summary: Today's Groups puzzle (payload unchanged by feature 005)
       description: |
         One deterministic puzzle per UTC day. The payload contains the 16 tiles (image kind + id
-        derived from each tile key client-side, as in feature 002) and the mistake limit.
+        derived from each tile key client-side, as in feature 002) and the mistake limit. The
+        solution's criteria are never part of this response.
       responses:
         "200":
-          description: The day's groups puzzle payload and stores state.
+          description: The day's groups puzzle payload.
         "404":
           $ref: "#/components/responses/UnknownGame"
         "503":
@@ -35,13 +37,13 @@ paths:
   /api/daily/groups/attempt:
     post:
       operationId: submitGroupsAttempt
-      summary: Resolve a four-tile proposal (unchanged by feature 003)
+      summary: Resolve a four-tile proposal (shape unchanged by feature 005)
       description: |
         The client sends tileKeys, the foundGroups it already holds, and its missLog — evidence
         the server verifies against the stored solution (Constitution IV). A hit returns the
         group criterion and tileKeys; a miss below the limit returns only the overlap count; the
-        ending miss (fifth mistake) returns the full groups mapping, which the client renders as
-        the red-row reveal.
+        ending miss (fifth mistake) returns the full groups mapping. The criterion's type can
+        now be same_source; same_language is never emitted.
       requestBody:
         required: true
         content:
@@ -80,7 +82,7 @@ paths:
                 $ref: "#/components/schemas/GroupsOutcome"
               examples:
                 groupsHit:
-                  summary: Correct group, criterion disclosed; client adds a green row
+                  summary: Correct group, criterion disclosed
                   value:
                     result: hit
                     tileKeys: ["c:1@a:9", "c:2@a:9", "c:3@a:9", "c:4@a:9"]
@@ -96,7 +98,7 @@ paths:
                     remainingGroups: 4
                     state: in_progress
                 groupsLost:
-                  summary: Ending miss discloses every group; client renders the red rows
+                  summary: Ending miss discloses every group, including the same_source group
                   value:
                     result: miss
                     tileKeys: ["c:1@a:9", "c:2@a:9", "c:9@a:1", "c:8@a:2"]
@@ -106,7 +108,7 @@ paths:
                       - keys: ["c:5@a:1", "c:6@a:1", "c:7@a:1", "c:8@a:1"]
                         criterion: { type: same_season, season: fall, year: 2026 }
                       - keys: ["c:9@a:2", "c:10@a:2", "c:11@a:2", "c:12@a:2"]
-                        criterion: { type: same_source, source: Manga }
+                        criterion: { type: same_source, source: Web novel }
                       - keys: ["c:13@a:4", "c:14@a:4", "c:15@a:4", "c:16@a:4"]
                         criterion: { type: same_voice_actor, personId: 9001 }
                     state: lost
@@ -148,6 +150,23 @@ components:
             result:
               type: string
               enum: [hit]
+            criterion:
+              allOf:
+                - type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [same_anime, same_season, same_source, same_voice_actor]
+                - type: object
+                  properties:
+                    animeId: { type: integer }
+                    season: { type: string }
+                    year: { type: integer }
+                    source: { type: string }
+                    personId: { type: integer }
+              description: |
+                The revealed shared fact. same_language is removed and can never be emitted.
+                same_source carries the source material (criterion.source) and no animeId.
             state:
               type: string
               enum: [in_progress, won]
@@ -186,9 +205,8 @@ components:
               type: string
               enum: [lost]
       description: |
-        hit carries the criterion (client renders a green row); the lost miss carries the full
-        groups mapping (client renders found rows green + the rest red). Both shapes are exactly
-        feature 001's contract.
+        hit carries the criterion; the lost miss carries the full groups mapping. Both shapes
+        are exactly feature 001's contract — only the criterion type set changed.
     ErrorEnvelope:
       type: object
       required: [error]

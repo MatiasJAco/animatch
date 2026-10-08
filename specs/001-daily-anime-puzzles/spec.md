@@ -53,6 +53,7 @@ The games may present, and derive counts from, only these catalog facts:
 6. Anime season
 7. Voice language
 8. Voice role
+9. Anime source material
 
 Studio, biography, favorites ranking, images, and any other attribute are out of v1 scope.
 Favorites ranking may be considered in a future version, but no v1 screen may use it.
@@ -435,7 +436,7 @@ unchanged.
   people, characters, and series MAY reappear on later days.
 - **FR-008**: The system MUST NOT modify the catalog. It MUST NOT read or write the import job
   tables. It MUST add only its own new game tables.
-- **FR-009**: Only the eight allowed facts and data derived from them by counting or grouping
+- **FR-009**: Only the nine allowed facts and data derived from them by counting or grouping
   MUST be presented to the visitor. No other catalog attribute may appear in any v1 screen.
 - **FR-010**: The browser MUST NOT talk to the database. All puzzle and catalog data MUST reach
   the browser through the application's own service.
@@ -553,7 +554,7 @@ unchanged.
 - **FR-031**: Each puzzle MUST consist of sixteen tiles, each a character or a voice actor, of
   which exactly four are hidden groups of four.
 - **FR-032**: The four groups MUST each share one allowed fact among themselves: the same anime,
-  the same season, the same voice language, or the same voice actor.
+  the same season, the same source material, or the same voice actor.
 - **FR-033**: The visitor MUST be able to select up to four tiles and submit them as a group
   proposal.
 - **FR-034**: A correct proposal MUST arrange those four tiles into a permanent horizontal row on the board showing the group's shared criterion, and they must remain visible until the game ends. The tiles in that row are no longer selectable.
@@ -683,7 +684,7 @@ catalog write of any kind. Favorites ranking is not used in v1 and may be consid
   never a blank page or a silent substitution of an older season.
 - **SC-009**: With the catalog unavailable and then restored, retry loads the puzzle successfully
   in 100% of checks.
-- **SC-010**: No v1 screen displays any catalog fact outside the eight allowed facts, confirmed by
+- **SC-010**: No v1 screen displays any catalog fact outside the nine allowed facts, confirmed by
   inspection in 100% of checks.
 - **SC-011**: Every visitor-facing string exists in both Spanish and English, with zero missing
   translations found in review.
