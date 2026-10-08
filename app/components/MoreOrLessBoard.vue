@@ -108,34 +108,47 @@ const retry = () => {
 </script>
 
 <template>
-  <section class="card more-board">
-    <p class="badge">{{ t('more_or_less.round', { current: round + 1, total: puzzle.rounds }) }}</p>
-    <p class="muted">{{ t('more_or_less.question') }}</p>
+  <!-- Feature 007: comparison first, then the More/Fewer buttons, then the round bar and the
+       how-to-play copy. -->
+  <div class="game-play more-board">
+    <div class="game-board">
+      <ErrorPanel
+        v-if="attemptError"
+        :code="attemptError"
+        :pending="busy"
+        :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
+      />
 
-    <div class="comparison">
-      <div class="comparison__card">
-        <EntityImage class="tile__art" kind="person" :id="left.id" :name="left.name" />
-        <strong>{{ left.name }}</strong>
-        <!-- The right card carries the revealed count; this hidden twin reserves the same height
-             so both images get identical flex space and end up the same height. -->
-        <span class="badge comparison__count-spacer" aria-hidden="true">&nbsp;</span>
+      <div class="comparison">
+        <div class="comparison__card">
+          <EntityImage class="tile__art" kind="person" :id="left.id" :name="left.name" />
+          <strong>{{ left.name }}</strong>
+          <!-- The right card carries the revealed count; this hidden twin reserves the same height
+               so both images get identical flex space and end up the same height. -->
+          <span class="badge comparison__count-spacer" aria-hidden="true">&nbsp;</span>
+        </div>
+        <div aria-hidden="true">&mdash;</div>
+        <div class="comparison__card">
+          <EntityImage class="tile__art" kind="person" :id="right.id" :name="right.name" />
+          <strong>{{ right.name }}</strong>
+          <span class="badge">{{ given }}</span>
+        </div>
       </div>
-      <div aria-hidden="true">&mdash;</div>
-      <div class="comparison__card">
-        <EntityImage class="tile__art" kind="person" :id="right.id" :name="right.name" />
-        <strong>{{ right.name }}</strong>
-        <span class="badge">{{ given }}</span>
+
+      <div v-if="revealed && lastOutcome" class="stack">
+        <p :class="lastOutcome.result === 'hit' ? 'feedback--correct' : 'feedback--wrong'">
+          {{ lastOutcome.result === 'hit' ? t('more_or_less.correct') : t('more_or_less.wrong') }}
+        </p>
+        <p>{{ t('more_or_less.reveal', { count: lastOutcome.counts.hidden }) }}</p>
+        <p>
+          {{ lastOutcome.counts.hidden }}
+          <span aria-hidden="true">/</span>
+          {{ lastOutcome.counts.visible }}
+        </p>
       </div>
     </div>
 
-    <ErrorPanel
-      v-if="attemptError"
-      :code="attemptError"
-      :pending="busy"
-      :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
-    />
-
-    <div v-if="!isGameOver" class="row">
+    <div v-if="!isGameOver" class="game-actions">
       <button class="button" type="button" :disabled="busy" @click="submit('more')">
         {{ t('more_or_less.answer.more') }}
       </button>
@@ -143,17 +156,11 @@ const retry = () => {
         {{ t('more_or_less.answer.less') }}
       </button>
     </div>
+  </div>
 
-    <div v-if="revealed && lastOutcome" class="stack">
-      <p :class="lastOutcome.result === 'hit' ? 'feedback--correct' : 'feedback--wrong'">
-        {{ lastOutcome.result === 'hit' ? t('more_or_less.correct') : t('more_or_less.wrong') }}
-      </p>
-      <p>{{ t('more_or_less.reveal', { count: lastOutcome.counts.hidden }) }}</p>
-      <p>
-        {{ lastOutcome.counts.hidden }}
-        <span aria-hidden="true">/</span>
-        {{ lastOutcome.counts.visible }}
-      </p>
-    </div>
-  </section>
+  <footer class="game-meta">
+    <p class="badge">{{ t('more_or_less.round', { current: round + 1, total: puzzle.rounds }) }}</p>
+    <p class="muted">{{ t('game.more_or_less.help') }}</p>
+    <p class="muted">{{ t('more_or_less.question') }}</p>
+  </footer>
 </template>

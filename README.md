@@ -58,10 +58,12 @@ npm run test:viewport # Playwright viewport-fit gauge (needs DATABASE_URL + a br
 ```
 
 Vitest is capped at 15 tests per feature and requires no network access. `npm run test:viewport`
-boots the app and asserts, at 1920x1080, 1440x900, 1280x800, and 1024x768, that the document
-never scrolls and that every primary region stays inside the viewport; it needs the catalog
-database and downloads Chromium once via `npx playwright install chromium`. `@playwright/test`
-is dev-only verification tooling and is never shipped.
+boots the app and asserts, at 1920x1080, 1440x900, 1280x800, and 1024x768, that each game screen is
+board-first (the board is the first region, then the actions, then the status/how-to-play copy), that
+the title and Home/Reset share one row, and that no screen overflows horizontally. Vertical scrolling
+is allowed so the secondary copy can sit below the fold. The gate needs the catalog database and
+downloads Chromium once via `npx playwright install chromium`; `@playwright/test` is dev-only
+verification tooling and is never shipped.
 
 ## Layout
 

@@ -69,14 +69,10 @@ const lossView = computed<MoreOrLessLossView | null>(() => {
 </script>
 
 <template>
-  <main class="page">
-    <header class="page-header">
-      <div>
-        <h1>{{ t('game.more_or_less') }}</h1>
-        <p class="muted">{{ t('game.more_or_less.help') }}</p>
-      </div>
+  <GameShell :title="t('game.more_or_less')">
+    <template #header-actions>
       <GameHeaderControls game="more_or_less" />
-    </header>
+    </template>
 
     <ErrorPanel
       v-if="error"
@@ -87,22 +83,20 @@ const lossView = computed<MoreOrLessLossView | null>(() => {
     <div v-else-if="pending || !puzzle">
       <p>{{ t('common.loading') }}</p>
     </div>
-    <div v-else-if="finished" class="page-body">
-      <ResultPanel
-        game="more_or_less"
-        :state="gameState?.status === 'won' ? 'won' : 'lost'"
-        :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
-      >
-        <MoreOrLessLossExplanation v-if="lossView" :view="lossView" />
-      </ResultPanel>
-    </div>
-    <div v-else class="page-body">
-      <MoreOrLessBoard
-        :puzzle="puzzle"
-        :initial-round="gameState?.round ?? 0"
-        :initial-attempts="gameState?.attempts ?? 0"
-        @outcome="handleOutcome"
-      />
-    </div>
-  </main>
+    <ResultPanel
+      v-else-if="finished"
+      game="more_or_less"
+      :state="gameState?.status === 'won' ? 'won' : 'lost'"
+      :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
+    >
+      <MoreOrLessLossExplanation v-if="lossView" :view="lossView" />
+    </ResultPanel>
+    <MoreOrLessBoard
+      v-else
+      :puzzle="puzzle"
+      :initial-round="gameState?.round ?? 0"
+      :initial-attempts="gameState?.attempts ?? 0"
+      @outcome="handleOutcome"
+    />
+  </GameShell>
 </template>

@@ -51,14 +51,10 @@ const handleOutcome = (
 </script>
 
 <template>
-  <main class="page">
-    <header class="page-header">
-      <div>
-        <h1>{{ t('game.groups') }}</h1>
-        <p class="muted">{{ t('game.groups.help') }}</p>
-      </div>
+  <GameShell :title="t('game.groups')">
+    <template #header-actions>
       <GameHeaderControls game="groups" />
-    </header>
+    </template>
 
     <ErrorPanel
       v-if="error"
@@ -69,22 +65,24 @@ const handleOutcome = (
     <div v-else-if="pending || !puzzle">
       <p>{{ t('common.loading') }}</p>
     </div>
-    <!-- Feature 003: the board stays mounted so a finished game keeps its rows visible — the
-         loss layout is a reveal of remaining groups, never a swap to a bare result card. -->
-    <GroupsBoard
-      :puzzle="puzzle"
-      :initial-status="(gameState?.status ?? 'in_progress') as never"
-      :initial-mistakes="gameState?.mistakes ?? 0"
-      :initial-attempts="gameState?.attempts ?? 0"
-      :initial-found="(gameState?.foundGroups as never) ?? []"
-      :initial-miss-log="gameState?.missLog ?? []"
-      @outcome="handleOutcome"
-    />
-    <ResultPanel
-      v-if="finished"
-      game="groups"
-      :state="gameState?.status === 'won' ? 'won' : 'lost'"
-      :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
-    />
-  </main>
+    <template v-else>
+      <!-- Feature 003: the board stays mounted so a finished game keeps its rows visible — the
+           loss layout is a reveal of remaining groups, never a swap to a bare result card. -->
+      <GroupsBoard
+        :puzzle="puzzle"
+        :initial-status="(gameState?.status ?? 'in_progress') as never"
+        :initial-mistakes="gameState?.mistakes ?? 0"
+        :initial-attempts="gameState?.attempts ?? 0"
+        :initial-found="(gameState?.foundGroups as never) ?? []"
+        :initial-miss-log="gameState?.missLog ?? []"
+        @outcome="handleOutcome"
+      />
+      <ResultPanel
+        v-if="finished"
+        game="groups"
+        :state="gameState?.status === 'won' ? 'won' : 'lost'"
+        :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
+      />
+    </template>
+  </GameShell>
 </template>

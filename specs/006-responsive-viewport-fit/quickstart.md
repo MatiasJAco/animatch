@@ -10,6 +10,13 @@ This guide proves the feature end to end: the document never scrolls at the four
 viewports, nothing is clipped, and no width ≥768px overflows horizontally. Implementation details
 live in `tasks.md` (from `/speckit.tasks`).
 
+> **Superseded for the game screens by feature 007 (2026-10-08).** The board-first layout in
+> `specs/007-board-first-layout` intentionally relaxes this feature's "no vertical scroll" rule for
+> Groups, More or Less and Match the Series: the board is the first region, the status/how-to-play
+> copy sits below the fold, and the gate now asserts **horizontal no-scroll only** on those screens.
+> The four-size matrix, the resize sweep, the horizontal-overflow checks and both-locale coverage
+> below still apply, and the home/error screens keep the locked frame.
+
 ## Prerequisites
 
 - Node 22.18+ and PostgreSQL reachable at `DATABASE_URL` (the game screens need today's puzzle;

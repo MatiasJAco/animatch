@@ -160,14 +160,10 @@ const resultState = computed(() => {
 </script>
 
 <template>
-  <main class="page">
-    <header class="page-header">
-      <div>
-        <h1>{{ t('game.match_the_series') }}</h1>
-        <p class="muted">{{ t('game.match_the_series.help') }}</p>
-      </div>
+  <GameShell :title="t('game.match_the_series')">
+    <template #header-actions>
       <GameHeaderControls game="match_the_series" />
-    </header>
+    </template>
 
     <ErrorPanel
       v-if="error"
@@ -206,5 +202,5 @@ const resultState = computed(() => {
         :attempts="attempts"
       />
     </template>
-  </main>
+  </GameShell>
 </template>

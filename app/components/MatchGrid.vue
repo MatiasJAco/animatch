@@ -90,79 +90,86 @@ const revealedPairings = computed(() =>
 </script>
 
 <template>
-  <section class="stack">
+  <!-- Feature 007: the clue + grid come first; the mistakes bar and the how-to-play line follow
+       the grid. -->
+  <div class="game-play">
+    <div class="game-board">
+      <!-- The clue and the Next control share one row so the board gets the freed height. -->
+      <div class="match-top">
+        <div v-if="clue" class="clue-card" aria-live="polite">
+          <EntityImage
+            ref="clueArt"
+            class="clue-card__art"
+            :kind="clue.kind"
+            :id="entityImageId(clue.kind, clue.key)"
+            :name="clue.name"
+          />
+          <div class="clue-card__body">
+            <p class="clue-card__kind">
+              {{ t(clue.kind === 'character' ? 'match.clue.character' : 'match.clue.person') }}
+            </p>
+            <p class="clue-card__name">{{ clue.name }}</p>
+            <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
+          </div>
+          <p v-if="clueArt && !clueArt.available" class="muted">{{ t('match.placeholder') }}</p>
+        </div>
+
+        <div class="match-top__actions">
+          <button class="button match-next" type="button" :disabled="!canSkip" @click="skip">
+            {{ t('match.next') }}
+          </button>
+          <p v-if="finished || nextCandidates.length === 0" class="muted">
+            {{ t('match.next.unavailable') }}
+          </p>
+        </div>
+      </div>
+
+      <div v-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
+      <p v-else-if="lastFeedback === 'miss'" class="feedback--wrong">{{ t('match.wrong') }}</p>
+      <p v-else-if="lastFeedback === 'hit'" class="feedback--correct">{{ t('match.green') }}</p>
+
+      <!-- FR-024: exactly one grid, three by three. No heading — the images get the room. -->
+      <div class="grid-3x3">
+        <button
+          v-for="series in puzzle.grid.series"
+          :key="series.key"
+          type="button"
+          class="tile"
+          :class="{ 'tile--green': isLocked(series.key) }"
+          :disabled="isLocked(series.key) || finished || busy"
+          @click="clickSeries(series.key)"
+        >
+          <EntityImage
+            class="tile__art"
+            kind="anime"
+            :id="entityImageId('anime', series.key)"
+            :name="series.title"
+          />
+          <span class="tile__label">{{ series.title }}</span>
+        </button>
+      </div>
+
+      <div v-if="revealedPairings.length > 0" class="stack">
+        <h3>{{ t('match.reveal.title') }}</h3>
+        <ul class="reveal-list">
+          <li v-for="entry in revealedPairings" :key="entry.name">
+            <span class="muted">
+              {{ entry.kind === 'character' ? t('match.clue.character') : t('match.clue.person') }}
+            </span>
+            <strong>{{ entry.name }}</strong>
+            <span>{{ entry.series }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer class="game-meta">
     <p class="badge">
       {{ t('match.mistakes', { current: wrongClicks, max: puzzle.wrongLimit }) }}
       &middot;
       {{ t('result.attempts', { count: attempts }) }}
     </p>
-
-    <!-- The clue and the Next control share one row so the board gets the freed height. -->
-    <div class="match-top">
-      <div v-if="clue" class="clue-card" aria-live="polite">
-        <EntityImage
-          ref="clueArt"
-          class="clue-card__art"
-          :kind="clue.kind"
-          :id="entityImageId(clue.kind, clue.key)"
-          :name="clue.name"
-        />
-        <div class="clue-card__body">
-          <p class="clue-card__kind">
-            {{ t(clue.kind === 'character' ? 'match.clue.character' : 'match.clue.person') }}
-          </p>
-          <p class="clue-card__name">{{ clue.name }}</p>
-          <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
-        </div>
-        <p v-if="clueArt && !clueArt.available" class="muted">{{ t('match.placeholder') }}</p>
-      </div>
-
-      <div class="match-top__actions">
-        <button class="button match-next" type="button" :disabled="!canSkip" @click="skip">
-          {{ t('match.next') }}
-        </button>
-        <p v-if="finished || nextCandidates.length === 0" class="muted">
-          {{ t('match.next.unavailable') }}
-        </p>
-      </div>
-    </div>
-
-    <div v-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
-    <p v-else-if="lastFeedback === 'miss'" class="feedback--wrong">{{ t('match.wrong') }}</p>
-    <p v-else-if="lastFeedback === 'hit'" class="feedback--correct">{{ t('match.green') }}</p>
-
-    <div v-if="revealedPairings.length > 0" class="stack">
-      <h3>{{ t('match.reveal.title') }}</h3>
-      <ul class="reveal-list">
-        <li v-for="entry in revealedPairings" :key="entry.name">
-          <span class="muted">
-            {{ entry.kind === 'character' ? t('match.clue.character') : t('match.clue.person') }}
-          </span>
-          <strong>{{ entry.name }}</strong>
-          <span>{{ entry.series }}</span>
-        </li>
-      </ul>
-    </div>
-
-    <!-- FR-024: exactly one grid, three by three. No heading — the images get the room. -->
-    <div class="grid-3x3">
-      <button
-        v-for="series in puzzle.grid.series"
-        :key="series.key"
-        type="button"
-        class="tile"
-        :class="{ 'tile--green': isLocked(series.key) }"
-        :disabled="isLocked(series.key) || finished || busy"
-        @click="clickSeries(series.key)"
-      >
-        <EntityImage
-          class="tile__art"
-          kind="anime"
-          :id="entityImageId('anime', series.key)"
-          :name="series.title"
-        />
-        <span class="tile__label">{{ series.title }}</span>
-      </button>
-    </div>
-  </section>
+    <p class="muted">{{ t('game.match_the_series.help') }}</p>
+  </footer>
 </template>

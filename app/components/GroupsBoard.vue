@@ -164,69 +164,70 @@ const visibleTiles = computed(() =>
 </script>
 
 <template>
-  <section class="stack">
-    <p class="badge">{{ t('groups.mistakes', { current: mistakes, max: puzzle.wrongLimit }) }}</p>
-    <p class="muted">{{ t('groups.select_four') }}</p>
+  <!-- Feature 007: the board is the first region under the header; the primary buttons sit
+       directly under it and the status/instruction copy follows them. -->
+  <div class="game-play">
+    <div class="game-board">
+      <ErrorPanel
+        v-if="attemptError"
+        :code="attemptError"
+        :pending="busy"
+        :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
+      />
 
-    <div v-if="revealed" class="feedback--wrong">
-      {{ t('groups.game_over') }}
-    </div>
-    <div v-else-if="feedback?.result === 'miss'" class="feedback--wrong">
-      {{ t('groups.overlap', { count: feedback.overlap }) }}
-    </div>
-    <div v-else-if="feedback?.result === 'hit'" class="feedback--correct">
-      {{ t('groups.found', { criterion: criterionLabel(feedback.criterion) }) }}
-    </div>
-
-    <ErrorPanel
-      v-if="attemptError"
-      :code="attemptError"
-      :pending="busy"
-      :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
-    />
-
-    <!-- Feedback round: a discovered group now takes a full row inside the same board grid the
-         tiles use, so it occupies exactly the space its four tiles did and the board never needs
-         to scroll. Found/revealed rows come first and the remaining tiles reflow below them. -->
-    <div class="grid-4x4">
-      <div
-        v-for="(row, rowIndex) in rows"
-        :key="`row-${rowIndex}`"
-        class="group-row"
-        :class="row.kind === 'revealed' ? 'group-row--revealed' : 'group-row--found'"
-      >
-        <span class="group-row__criterion">{{ criterionLabel(row.criterion) }}</span>
-        <span v-for="tileKey in row.tileKeys" :key="tileKey" class="group-row__tile">
-          <EntityImage
-            class="group-row__art"
-            :kind="tileByKey(tileKey)?.kind"
-            :id="tileByKey(tileKey) ? entityImageId(tileByKey(tileKey)!.kind, tileKey) : undefined"
-            :name="tileByKey(tileKey)?.name ?? ''"
-          />
-          <span class="tile__label">{{ tileByKey(tileKey)?.name }}</span>
-        </span>
+      <div v-if="revealed" class="feedback--wrong">
+        {{ t('groups.game_over') }}
+      </div>
+      <div v-else-if="feedback?.result === 'miss'" class="feedback--wrong">
+        {{ t('groups.overlap', { count: feedback.overlap }) }}
+      </div>
+      <div v-else-if="feedback?.result === 'hit'" class="feedback--correct">
+        {{ t('groups.found', { criterion: criterionLabel(feedback.criterion) }) }}
       </div>
 
-      <button
-        v-for="tile in visibleTiles"
-        :key="tile.key"
-        type="button"
-        class="tile"
-        :aria-pressed="selection.includes(tile.key)"
-        :disabled="busy || finished"
-        @click="toggle(tile.key)"
-      >
-        <EntityImage
-          class="tile__art"
-          :kind="tile.kind"
-          :id="entityImageId(tile.kind, tile.key)"
-          :name="tile.name"
-        />
-        <span class="tile__label">{{ tile.name }}</span>
-      </button>
+      <!-- A discovered group takes a full row inside the same board grid the tiles use, so it
+           occupies exactly the space its four tiles did. Found/revealed rows come first and the
+           remaining tiles reflow below them. -->
+      <div class="grid-4x4">
+        <div
+          v-for="(row, rowIndex) in rows"
+          :key="`row-${rowIndex}`"
+          class="group-row"
+          :class="row.kind === 'revealed' ? 'group-row--revealed' : 'group-row--found'"
+        >
+          <span class="group-row__criterion">{{ criterionLabel(row.criterion) }}</span>
+          <span v-for="tileKey in row.tileKeys" :key="tileKey" class="group-row__tile">
+            <EntityImage
+              class="group-row__art"
+              :kind="tileByKey(tileKey)?.kind"
+              :id="tileByKey(tileKey) ? entityImageId(tileByKey(tileKey)!.kind, tileKey) : undefined"
+              :name="tileByKey(tileKey)?.name ?? ''"
+            />
+            <span class="tile__label">{{ tileByKey(tileKey)?.name }}</span>
+          </span>
+        </div>
+
+        <button
+          v-for="tile in visibleTiles"
+          :key="tile.key"
+          type="button"
+          class="tile"
+          :aria-pressed="selection.includes(tile.key)"
+          :disabled="busy || finished"
+          @click="toggle(tile.key)"
+        >
+          <EntityImage
+            class="tile__art"
+            :kind="tile.kind"
+            :id="entityImageId(tile.kind, tile.key)"
+            :name="tile.name"
+          />
+          <span class="tile__label">{{ tile.name }}</span>
+        </button>
+      </div>
     </div>
 
-    <div v-if="!finished" class="row">
+    <div v-if="!finished" class="game-actions">
       <button type="button" class="button button--ghost" :disabled="busy" @click="clear">
         {{ t('groups.clear') }}
       </button>
@@ -239,5 +240,11 @@ const visibleTiles = computed(() =>
         {{ t('groups.submit') }}
       </button>
     </div>
-  </section>
+  </div>
+
+  <footer class="game-meta">
+    <p class="badge">{{ t('groups.mistakes', { current: mistakes, max: puzzle.wrongLimit }) }}</p>
+    <p class="muted">{{ t('game.groups.help') }}</p>
+    <p class="muted">{{ t('groups.select_four') }}</p>
+  </footer>
 </template>

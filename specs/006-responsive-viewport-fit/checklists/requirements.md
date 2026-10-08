@@ -98,3 +98,12 @@ Re-verified after the revision at 1024x768 with the gate: `document.scrollingEle
 finished-state selector moved from `.group-rows` to the board grid). No data, API, i18n-key,
 dependency, or gameplay change; Constitution VI: no new tests were added — the revision is covered
 by the existing viewport gate.
+
+### Superseded for the game screens by feature 007 (2026-10-08)
+
+- `specs/007-board-first-layout` deliberately relaxes this feature's **no-vertical-scroll** rule for
+  the three game screens: the board is now the first region, the status/how-to-play copy falls below
+  the fold, and the viewport gate asserts **horizontal no-scroll only** on those screens (the home
+  and error screens keep the locked frame). The four-size matrix, the 60px resize sweep, the
+  horizontal-overflow checks and both-locale coverage all remain in force. See
+  `specs/007-board-first-layout/` for the spec, plan and gate.
