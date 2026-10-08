@@ -71,12 +71,6 @@ const handleOutcome = (
     </div>
     <!-- Feature 003: the board stays mounted so a finished game keeps its rows visible — the
          loss layout is a reveal of remaining groups, never a swap to a bare result card. -->
-    <ResultPanel
-      v-if="finished"
-      game="groups"
-      :state="gameState?.status === 'won' ? 'won' : 'lost'"
-      :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
-    />
     <GroupsBoard
       :puzzle="puzzle"
       :initial-status="(gameState?.status ?? 'in_progress') as never"
@@ -85,6 +79,12 @@ const handleOutcome = (
       :initial-found="(gameState?.foundGroups as never) ?? []"
       :initial-miss-log="gameState?.missLog ?? []"
       @outcome="handleOutcome"
+    />
+    <ResultPanel
+      v-if="finished"
+      game="groups"
+      :state="gameState?.status === 'won' ? 'won' : 'lost'"
+      :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
     />
   </main>
 </template>

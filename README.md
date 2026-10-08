@@ -53,10 +53,15 @@ absent from `npm run build` output. To discard a puzzle the *server* already sto
 ## Test
 
 ```bash
-npm test
+npm test              # vitest unit/integration suite (no network required)
+npm run test:viewport # Playwright viewport-fit gauge (needs DATABASE_URL + a browser)
 ```
 
-Vitest, capped at 15 tests for the whole feature, with no network access required.
+Vitest is capped at 15 tests per feature and requires no network access. `npm run test:viewport`
+boots the app and asserts, at 1920x1080, 1440x900, 1280x800, and 1024x768, that the document
+never scrolls and that every primary region stays inside the viewport; it needs the catalog
+database and downloads Chromium once via `npx playwright install chromium`. `@playwright/test`
+is dev-only verification tooling and is never shipped.
 
 ## Layout
 
@@ -66,7 +71,8 @@ Vitest, capped at 15 tests for the whole feature, with no network access require
 | `server/` | Everything that touches the database: API routes, generators, catalog queries |
 | `migrations/` | This app's own schema changes, one file per change |
 | `scripts/` | Operational scripts such as the migration runner |
-| `tests/` | The automated suite |
+| `tests/` | The automated vitest suite |
+| `e2e/` | The Playwright viewport-fit gate |
 | `specs/001-daily-anime-puzzles/` | Specification, plan, research, data model, contract, tasks |
 | `docs/` | Reference documentation for the existing catalog |
 

@@ -29,7 +29,9 @@ Expected: all tests pass, including the new coverage:
    - round indicator "Round N of 10",
    - the failed person's **tile** framed with a **red background** — the voice actor whose count ended the game,
    - that person's **true count in red** (the app's error red), alongside the count it was compared against, so the comparison proves the correct answer,
-   - the existing "You lost" + attempts + share block.
+   - the inline result summary (attempts + share controls). The former "You lost" card heading was
+     removed in feature 006's second design-feedback revision — see
+     [specs/006-responsive-viewport-fit/checklists/requirements.md](../006-responsive-viewport-fit/checklists/requirements.md).
 3. Repeat at the **first round** and at the **final round**; both render the same complete explanation.
 
 ### 2. Explanation survives a reload / revisit (US2)

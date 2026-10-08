@@ -8,9 +8,11 @@ const { t } = useLocale()
 </script>
 
 <template>
-  <section class="card">
-    <h2>{{ state === 'won' ? t('result.won') : t('result.lost') }}</h2>
-    <p>{{ t('result.attempts', { count: attempts }) }}</p>
+  <!-- Feedback round: the "You lost"/"You won" card duplicated the board's own result, so the
+       frame and heading are gone. Only the result-specific content and the share controls stay,
+       rendered inline so the board keeps the reclaimed space. -->
+  <section class="result-summary">
+    <p class="muted">{{ t('result.attempts', { count: attempts }) }}</p>
     <slot />
     <ShareButton :game="game" :state="state" :attempts="attempts" />
   </section>

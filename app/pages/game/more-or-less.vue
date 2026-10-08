@@ -87,7 +87,7 @@ const lossView = computed<MoreOrLessLossView | null>(() => {
     <div v-else-if="pending || !puzzle">
       <p>{{ t('common.loading') }}</p>
     </div>
-    <div v-else-if="finished">
+    <div v-else-if="finished" class="page-body">
       <ResultPanel
         game="more_or_less"
         :state="gameState?.status === 'won' ? 'won' : 'lost'"
@@ -96,7 +96,7 @@ const lossView = computed<MoreOrLessLossView | null>(() => {
         <MoreOrLessLossExplanation v-if="lossView" :view="lossView" />
       </ResultPanel>
     </div>
-    <div v-else>
+    <div v-else class="page-body">
       <MoreOrLessBoard
         :puzzle="puzzle"
         :initial-round="gameState?.round ?? 0"

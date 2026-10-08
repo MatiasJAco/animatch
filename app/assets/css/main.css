@@ -14,7 +14,8 @@
   --correct: #1c7a4a;
   --wrong: #b3261e;
   --radius: 10px;
-  --gap: 0.75rem;
+  /* Fluid spacing: tightens toward 1024px and relaxes toward 1920px (research R-002.1). */
+  --gap: clamp(0.5rem, 0.35rem + 0.4vw, 0.75rem);
   --tile-aspect: 3 / 4;
 }
 
@@ -39,19 +40,39 @@
   box-sizing: border-box;
 }
 
+/* Viewport-locked shell (contract §1): the document cannot scroll in either axis. Every
+   overflowing region is therefore visible to the verification gate instead of being detected
+   as a scrollbar. `100vh` is the fallback for engines without `dvh`. */
 html {
   -webkit-text-size-adjust: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   font-size: 1rem;
   line-height: 1.5;
-  /* FR-016: no horizontal scrolling at any width. */
-  overflow-x: hidden;
+}
+
+.app {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Nuxt mounts the app inside #__nuxt; without height here the `.app { height: 100% }`
+   resolves against an auto-height parent and the lock is lost. */
+#__nuxt {
+  height: 100%;
+  min-height: 0;
 }
 
 h1,
@@ -93,13 +114,21 @@ a {
   }
 }
 
-.page {
+.page,
+.home {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   max-width: 46rem;
   margin: 0 auto;
-  padding: 1rem;
+  padding: clamp(0.5rem, 0.35rem + 0.6vw, 1rem);
 }
 
 .page-header {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -111,24 +140,31 @@ a {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: var(--gap);
+  padding: clamp(0.5rem, 0.35rem + 0.5vw, 0.75rem);
+  min-height: 0;
 }
 
 .card + .card {
   margin-top: var(--gap);
 }
 
+/* Feedback round: the result no longer renders as a card with a "You lost"/"You won" heading —
+   that duplicated the board's own reveal. The result-specific content and the share controls
+   stay inline, so they take only the height they need and never push the board. */
+.result-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
 .muted {
   color: var(--text-muted);
 }
 
-.home {
-  max-width: 46rem;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
 .home__header {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -149,7 +185,7 @@ a {
   gap: 0.4rem;
 }
 
-.button--ghost {
+.button.button--ghost {
   color: var(--text);
   background: transparent;
   border-color: var(--border);
@@ -164,6 +200,43 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+  min-height: 0;
+}
+
+/* The board section fills the shell so its grid can absorb whatever the fixed chrome leaves
+   (research R-002.3, contract §1 "min-height chain"). */
+.page > .stack {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* Collapse the element margins that used to double-count the stack gap (research R-002.1). */
+.stack > :where(p, h1, h2, h3) {
+  margin-bottom: 0;
+}
+
+/* Inside the board, P1 regions keep their size; only the grid and the P3 lists absorb the
+   height left over (contract §2 — headers, boards' chrome, action rows and results never
+   shrink to the point of clipping). */
+.page > .stack > * {
+  flex: 0 0 auto;
+}
+
+.page > .stack > .grid-3x3,
+.page > .stack > .grid-4x4,
+.page > .stack > .stack {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+/* A finished board must yield to its P3 list, so the grid shrinks faster than the list. */
+.page > .stack > .grid-3x3,
+.page > .stack > .grid-4x4 {
+  flex-shrink: 3;
+}
+
+.page > .card {
+  flex: 0 0 auto;
 }
 
 .row {
@@ -214,8 +287,9 @@ a {
 
 /* Neutral placeholder tile, identical for every tile. FR-029, no external artwork. */
 .tile {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
   gap: 0.35rem;
   width: 100%;
   font: inherit;
@@ -224,23 +298,31 @@ a {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.4rem;
+  padding: clamp(0.25rem, 0.2rem + 0.25vw, 0.4rem);
   cursor: pointer;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The art keeps its 3:4 ratio and is only ever scaled down to fit the row, never squashed or
+   cropped (the task's "maintain aspect ratio even if smaller" rule). The image itself uses
+   `object-fit: contain`, so no artwork is ever cut off. */
+.tile > .tile__art {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  min-height: 0;
 }
 
 .tile__art {
   width: 100%;
   aspect-ratio: var(--tile-aspect);
   border-radius: calc(var(--radius) - 4px);
-  background:
-    repeating-linear-gradient(
-      135deg,
-      var(--surface-alt) 0 8px,
-      var(--border) 8px 16px
-    );
+  background: var(--surface-alt);
 }
 
 .tile__label {
+  justify-self: stretch;
   font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
@@ -256,28 +338,30 @@ a {
 .grid-4x4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.4rem;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* Feature 003: found groups stay on the board as a permanent horizontal green row, and a loss
-   reveals the remaining groups as red rows in the same layout. The criterion label sits at the
-   left end of each row; color is never the only signal (the label is always present). */
-.group-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
+/* Feature 003 + feedback round: a found group is a permanent horizontal green row and a loss
+   reveals the remaining groups as red rows. Each row spans the full board grid so it takes the
+   exact space its four tiles occupied; there is no separate scrolling region and the remaining
+   tiles reflow below. The criterion label sits at the left end of each row; colour is never the
+   only signal (the label is always present). */
 .group-row {
+  grid-column: 1 / -1;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--surface-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.5rem;
+  padding: clamp(0.3rem, 0.25rem + 0.2vw, 0.5rem);
 }
 
 .group-row--found {
@@ -289,8 +373,9 @@ a {
 }
 
 .group-row__criterion {
-  flex: 0 0 5rem;
-  font-size: 0.85rem;
+  flex: 0 0 auto;
+  max-width: 6rem;
+  font-size: 0.78rem;
   overflow-wrap: anywhere;
   color: var(--correct);
 }
@@ -300,18 +385,30 @@ a {
 }
 
 .group-row__tile {
-  flex: 0 0 5.5rem;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.8rem;
+}
+
+.group-row__art {
+  flex: 0 0 auto;
+  width: clamp(1.5rem, 2.4vw, 2.25rem);
+  aspect-ratio: var(--tile-aspect);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--surface-alt);
 }
 
 /* FR-024: exactly one grid of three by three current-season series. */
 .grid-3x3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.4rem;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.25rem, 0.2rem + 0.2vw, 0.4rem);
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* FR-026: a correct click colors the tile green and locks it. */
@@ -332,17 +429,39 @@ a {
   padding: 0.7rem;
 }
 
+/* The clue and the Next control on one row (feedback round: Next no longer costs a full row). */
+.match-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--gap);
+}
+
+.match-top .clue-card {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.match-top__actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.match-next {
+  min-width: 8rem;
+}
+
 .clue-card__art {
   flex: 0 0 auto;
-  width: 64px;
+  width: clamp(3rem, 6vw, 4rem);
+  max-height: clamp(3rem, 16vh, 6rem);
   aspect-ratio: var(--tile-aspect);
   border-radius: calc(var(--radius) - 4px);
-  background:
-    repeating-linear-gradient(
-      135deg,
-      var(--surface-alt) 0 8px,
-      var(--border) 8px 16px
-    );
+  background: var(--surface-alt);
 }
 
 /* Feature 002: the first-party image tiles the boards render. The striped background the
@@ -357,13 +476,22 @@ a {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* Feature 006 feedback: never crop the artwork — fit it inside the holder and keep the
+     image's own aspect ratio, scaling it down when the holder is small. */
+  object-fit: contain;
 }
 
 .entity-art__fallback {
   display: block;
   width: 100%;
   height: 100%;
+  /* The neutral placeholder is the striped pattern; a loaded image sits on a plain surface. */
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--surface-alt) 0 8px,
+      var(--border) 8px 16px
+    );
 }
 
 .clue-card__body {
@@ -427,12 +555,17 @@ a {
   border-color: var(--accent);
 }
 
+/* R-002.4: two columns halve the 18-entry reveal list's height. It is a P3 region and the only
+   candidate for an inner-scroll exception, granted only by measurement (contract §2). */
 .reveal-list {
   display: grid;
-  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.25rem 0.75rem;
   margin: 0;
   padding: 0;
   list-style: none;
+  min-height: 0;
+  overflow: auto;
 }
 
 .reveal-list li {
@@ -469,9 +602,9 @@ a {
 
 .comparison {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.6rem;
+  gap: clamp(0.35rem, 0.3rem + 0.3vw, 0.6rem);
   text-align: center;
 }
 
@@ -485,6 +618,56 @@ a {
 
 .comparison__card .tile__art {
   width: 100%;
+  max-height: clamp(4rem, 16vh, 12rem);
+}
+
+/* Feedback round: reserves the revealed count's height on the side that has no count, so the two
+   comparison images share the same leftover space and render at the same height. */
+.comparison__count-spacer {
+  visibility: hidden;
+}
+
+/* Game bodies fill the shell so a board with spare room (More-or-Less) grows instead of
+   leaving empty space above small images (feedback round). */
+.page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-body > .card {
+  flex: 0 0 auto;
+}
+
+.page-body > .more-board {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.more-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.more-board .comparison {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.more-board .comparison__card {
+  min-height: 0;
+}
+
+/* Basis 0 + grow: the image takes exactly the height left after the name and count, so it is
+   as large as the space allows and can never push them out of the card. */
+.more-board .comparison__card > .tile__art {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  max-height: none;
 }
 
 /* Feature 004: on a loss, the failed round's tile is framed in the error red so the loss
@@ -499,6 +682,21 @@ a {
 
 .loss-explanation__tile .tile__art {
   box-shadow: 0 0 0 3px var(--surface) inset;
+}
+
+/* The compared side keeps the same padded frame (so both images share a width and a height)
+   without the red that marks the failed side. */
+.loss-explanation__tile--neutral {
+  background: transparent;
+}
+
+.loss-explanation__tile--neutral .tile__art {
+  box-shadow: none;
+}
+
+/* The finished comparison has room below it, so its images grow too (design feedback). */
+.loss-explanation .comparison__card .tile__art {
+  max-height: clamp(4rem, 30vh, 15rem);
 }
 
 @media (max-width: 640px) {

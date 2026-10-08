@@ -71,8 +71,10 @@ npx nuxt dev                      # play the game locally for the manual checks
    solved and revealed groups changed.
 
 9. **Scope boundary (R-007, R-011)** — after a loss, the reveal rows are shown in that ending
-   session under the result banner; a reload of a finished lost game shows the result panel (no
-   stored reveal). This is intentional and out of scope to change.
+   session (since feature 006's 2026-10-08 second design-feedback revision, as full-width rows
+   inside the board grid rather than under a result banner); a reload of a finished lost game shows
+   the board's original tiles plus the inline result summary (no stored reveal). This is intentional
+   and out of scope to change.
 
 ## Expected outcome
 

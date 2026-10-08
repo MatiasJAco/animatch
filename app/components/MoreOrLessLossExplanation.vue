@@ -21,7 +21,11 @@ const { t } = useLocale()
       </div>
       <div aria-hidden="true">&mdash;</div>
       <div class="comparison__card">
-        <EntityImage class="tile__art" kind="person" :id="view.visibleId" :name="view.visibleName" />
+        <!-- The failed side is framed in the error red; wrapping the compared side in the same
+             padded frame (transparent) keeps both images the same width and therefore height. -->
+        <div class="loss-explanation__tile loss-explanation__tile--neutral">
+          <EntityImage class="tile__art" kind="person" :id="view.visibleId" :name="view.visibleName" />
+        </div>
         <strong>{{ view.visibleName }}</strong>
         <span class="badge">{{ view.visible }}</span>
       </div>

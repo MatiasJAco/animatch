@@ -17,6 +17,12 @@ dist/
 *.log
 coverage/
 
+# Playwright (dev-only verification tooling)
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db

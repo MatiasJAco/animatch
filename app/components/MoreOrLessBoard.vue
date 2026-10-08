@@ -108,7 +108,7 @@ const retry = () => {
 </script>
 
 <template>
-  <section class="card">
+  <section class="card more-board">
     <p class="badge">{{ t('more_or_less.round', { current: round + 1, total: puzzle.rounds }) }}</p>
     <p class="muted">{{ t('more_or_less.question') }}</p>
 
@@ -116,6 +116,9 @@ const retry = () => {
       <div class="comparison__card">
         <EntityImage class="tile__art" kind="person" :id="left.id" :name="left.name" />
         <strong>{{ left.name }}</strong>
+        <!-- The right card carries the revealed count; this hidden twin reserves the same height
+             so both images get identical flex space and end up the same height. -->
+        <span class="badge comparison__count-spacer" aria-hidden="true">&nbsp;</span>
       </div>
       <div aria-hidden="true">&mdash;</div>
       <div class="comparison__card">
@@ -133,10 +136,10 @@ const retry = () => {
     />
 
     <div v-if="!isGameOver" class="row">
-      <button type="button" :disabled="busy" @click="submit('more')">
+      <button class="button" type="button" :disabled="busy" @click="submit('more')">
         {{ t('more_or_less.answer.more') }}
       </button>
-      <button type="button" :disabled="busy" @click="submit('less')">
+      <button class="button button--secondary" type="button" :disabled="busy" @click="submit('less')">
         {{ t('more_or_less.answer.less') }}
       </button>
     </div>

@@ -185,17 +185,20 @@ const visibleTiles = computed(() =>
       :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
     />
 
-    <div class="group-rows">
+    <!-- Feedback round: a discovered group now takes a full row inside the same board grid the
+         tiles use, so it occupies exactly the space its four tiles did and the board never needs
+         to scroll. Found/revealed rows come first and the remaining tiles reflow below them. -->
+    <div class="grid-4x4">
       <div
         v-for="(row, rowIndex) in rows"
-        :key="rowIndex"
+        :key="`row-${rowIndex}`"
         class="group-row"
         :class="row.kind === 'revealed' ? 'group-row--revealed' : 'group-row--found'"
       >
         <span class="group-row__criterion">{{ criterionLabel(row.criterion) }}</span>
         <span v-for="tileKey in row.tileKeys" :key="tileKey" class="group-row__tile">
           <EntityImage
-            class="tile__art"
+            class="group-row__art"
             :kind="tileByKey(tileKey)?.kind"
             :id="tileByKey(tileKey) ? entityImageId(tileByKey(tileKey)!.kind, tileKey) : undefined"
             :name="tileByKey(tileKey)?.name ?? ''"
@@ -203,9 +206,7 @@ const visibleTiles = computed(() =>
           <span class="tile__label">{{ tileByKey(tileKey)?.name }}</span>
         </span>
       </div>
-    </div>
 
-    <div v-if="!finished" class="grid-4x4">
       <button
         v-for="tile in visibleTiles"
         :key="tile.key"

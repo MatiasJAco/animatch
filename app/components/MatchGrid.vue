@@ -97,23 +97,34 @@ const revealedPairings = computed(() =>
       {{ t('result.attempts', { count: attempts }) }}
     </p>
 
-    <!-- FR-024a: exactly one card above the grid, showing a name and a project placeholder. -->
-    <div v-if="clue" class="clue-card" aria-live="polite">
-      <EntityImage
-        ref="clueArt"
-        class="clue-card__art"
-        :kind="clue.kind"
-        :id="entityImageId(clue.kind, clue.key)"
-        :name="clue.name"
-      />
-      <div class="clue-card__body">
-        <p class="clue-card__kind">
-          {{ t(clue.kind === 'character' ? 'match.clue.character' : 'match.clue.person') }}
-        </p>
-        <p class="clue-card__name">{{ clue.name }}</p>
-        <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
+    <!-- The clue and the Next control share one row so the board gets the freed height. -->
+    <div class="match-top">
+      <div v-if="clue" class="clue-card" aria-live="polite">
+        <EntityImage
+          ref="clueArt"
+          class="clue-card__art"
+          :kind="clue.kind"
+          :id="entityImageId(clue.kind, clue.key)"
+          :name="clue.name"
+        />
+        <div class="clue-card__body">
+          <p class="clue-card__kind">
+            {{ t(clue.kind === 'character' ? 'match.clue.character' : 'match.clue.person') }}
+          </p>
+          <p class="clue-card__name">{{ clue.name }}</p>
+          <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
+        </div>
+        <p v-if="clueArt && !clueArt.available" class="muted">{{ t('match.placeholder') }}</p>
       </div>
-      <p v-if="clueArt && !clueArt.available" class="muted">{{ t('match.placeholder') }}</p>
+
+      <div class="match-top__actions">
+        <button class="button match-next" type="button" :disabled="!canSkip" @click="skip">
+          {{ t('match.next') }}
+        </button>
+        <p v-if="finished || nextCandidates.length === 0" class="muted">
+          {{ t('match.next.unavailable') }}
+        </p>
+      </div>
     </div>
 
     <div v-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
@@ -133,8 +144,7 @@ const revealedPairings = computed(() =>
       </ul>
     </div>
 
-    <!-- FR-024: exactly one grid, three by three. -->
-    <h3>{{ t('match.board') }}</h3>
+    <!-- FR-024: exactly one grid, three by three. No heading — the images get the room. -->
     <div class="grid-3x3">
       <button
         v-for="series in puzzle.grid.series"
@@ -154,12 +164,5 @@ const revealedPairings = computed(() =>
         <span class="tile__label">{{ series.title }}</span>
       </button>
     </div>
-
-    <button class="button" type="button" :disabled="!canSkip" @click="skip">
-      {{ t('match.next') }}
-    </button>
-    <p v-if="finished || nextCandidates.length === 0" class="muted">
-      {{ t('match.next.unavailable') }}
-    </p>
   </section>
 </template>
