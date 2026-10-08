@@ -71,8 +71,9 @@ const submit = async (answer: MoreOrLessAnswer) => {
     const outcome = (await res.json()) as MoreOrLessOutcome
     lastOutcome.value = outcome
     attempts.value += 1
-    revealed.value = true
 
+    // A miss (and the round-10 win) end the game; the result view owns the durable
+    // explanation, so the board stages no transient reveal for either (R-006).
     if (outcome.result === 'miss') {
       emit('outcome', { ...outcome, attempts: attempts.value, round: round.value })
       return
@@ -82,6 +83,8 @@ const submit = async (answer: MoreOrLessAnswer) => {
       emit('outcome', { ...outcome, attempts: attempts.value, round: round.value })
       return
     }
+
+    revealed.value = true
 
     // Carry this round's counts forward so the next comparison has a valid right side.
     givenCount.value = outcome.counts.hidden

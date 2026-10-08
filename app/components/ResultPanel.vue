@@ -11,6 +11,7 @@ const { t } = useLocale()
   <section class="card">
     <h2>{{ state === 'won' ? t('result.won') : t('result.lost') }}</h2>
     <p>{{ t('result.attempts', { count: attempts }) }}</p>
+    <slot />
     <ShareButton :game="game" :state="state" :attempts="attempts" />
   </section>
 </template>

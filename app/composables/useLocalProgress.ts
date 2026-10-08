@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { isGameId, type GameId } from '~~/server/game/ids'
 import { getUtcDateNow, type PuzzleDate } from '~~/server/utils/day'
+import { isLossRecord, type MoreOrLessLossRecord } from '~/utils/moreOrLessLoss'
 
 const STORAGE_KEY = 'animatch:v1:progress'
 
@@ -32,6 +33,9 @@ export interface LocalGameState {
   missLog?: string[][]
   mistakes?: number
   endedAt?: string
+  // more_or_less: the failed round's comparison, persisted so the loss explanation
+  // survives a reload for the rest of the UTC day (FR-007).
+  loss?: MoreOrLessLossRecord
 }
 
 export interface LocalProgress {
@@ -42,6 +46,18 @@ export interface LocalProgress {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+// A malformed loss record is dropped while the game keeps its lost status, so a corrupt
+// entry degrades to the plain result instead of an error or a blank screen (FR-011).
+function sanitize(progress: LocalProgress): LocalProgress {
+  for (const id of Object.keys(progress.games) as GameId[]) {
+    const state = progress.games[id]
+    if (state && !isLossRecord(state.loss)) {
+      delete state.loss
+    }
+  }
+  return progress
 }
 
 // Only a well-formed entry counts; anything else is treated as unreadable.
@@ -62,7 +78,7 @@ function read(): LocalProgress | null {
       /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) &&
       isRecord(parsed.games)
     ) {
-      return { v: 1, date: parsed.date, games: parsed.games as LocalProgress['games'] }
+      return sanitize({ v: 1, date: parsed.date, games: parsed.games as LocalProgress['games'] })
     }
     return null
   } catch {
@@ -130,11 +146,17 @@ export function useLocalProgress() {
     save()
   }
 
-  const markFinished = (game: GameId, status: GameStatus, attempts: number) => {
+  const markFinished = (
+    game: GameId,
+    status: GameStatus,
+    attempts: number,
+    extra?: Partial<LocalGameState>,
+  ) => {
     setGameState(game, {
       status,
       attempts,
       endedAt: new Date().toISOString(),
+      ...extra,
     })
   }
 

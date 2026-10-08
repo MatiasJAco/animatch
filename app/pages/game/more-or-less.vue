@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { MoreOrLessPuzzleData, MoreOrLessOutcome } from '~~/server/game/moreOrLess'
+import {
+  isLossRecord,
+  moreOrLessLossView,
+  type MoreOrLessLossView,
+} from '~/utils/moreOrLessLoss'
 import { useLocale } from '~/composables/useLocale'
 import { useLocalProgress } from '~/composables/useLocalProgress'
 
@@ -20,7 +25,22 @@ const lastOutcome = ref<(MoreOrLessOutcome & { attempts: number; round: number }
 function handleOutcome(o: MoreOrLessOutcome & { attempts: number; round: number }) {
   lastOutcome.value = o
   if (o.state === 'won' || o.state === 'lost') {
-    progress.markFinished('more_or_less', o.state, o.attempts)
+    progress.markFinished(
+      'more_or_less',
+      o.state,
+      o.attempts,
+      o.state === 'lost'
+        ? {
+            loss: {
+              round: o.round,
+              given: o.given,
+              correct: o.correct,
+              hidden: o.counts.hidden,
+              visible: o.counts.visible,
+            },
+          }
+        : undefined,
+    )
     return
   }
   // FR-043a: a closed tab resumes at the same round with the same counters.
@@ -33,6 +53,19 @@ function handleOutcome(o: MoreOrLessOutcome & { attempts: number; round: number 
 }
 
 const finished = computed(() => gameState.value?.status === 'won' || gameState.value?.status === 'lost')
+
+// FR-007: the explanation is rebuilt from the stored loss record and the day's stable
+// puzzle, so a reload or a revisit later the same day shows it again.
+const lossView = computed<MoreOrLessLossView | null>(() => {
+  const state = gameState.value
+  if (!state || state.status !== 'lost' || !puzzle.value || !state.loss) {
+    return null
+  }
+  if (!isLossRecord(state.loss)) {
+    return null
+  }
+  return moreOrLessLossView(puzzle.value, state.loss)
+})
 </script>
 
 <template>
@@ -59,7 +92,9 @@ const finished = computed(() => gameState.value?.status === 'won' || gameState.v
         game="more_or_less"
         :state="gameState?.status === 'won' ? 'won' : 'lost'"
         :attempts="lastOutcome?.attempts ?? gameState?.attempts ?? 0"
-      />
+      >
+        <MoreOrLessLossExplanation v-if="lossView" :view="lossView" />
+      </ResultPanel>
     </div>
     <div v-else>
       <MoreOrLessBoard

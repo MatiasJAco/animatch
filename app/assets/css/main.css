@@ -487,6 +487,20 @@ a {
   width: 100%;
 }
 
+/* Feature 004: on a loss, the failed round's tile is framed in the error red so the loss
+   reads straight off the comparison: the red tile holds the true count, the other side holds
+   the value it was compared against. The red is never the only label (FR-012). */
+.loss-explanation__tile {
+  width: 100%;
+  background: var(--wrong);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.35rem;
+}
+
+.loss-explanation__tile .tile__art {
+  box-shadow: 0 0 0 3px var(--surface) inset;
+}
+
 @media (max-width: 640px) {
   .match-board {
     grid-template-columns: minmax(0, 1fr);

@@ -227,4 +227,56 @@ describe('device state', () => {
     expect(prefs.getStoredLocale()).toBe('en')
     expect(localStorage.getItem(KEYS.prefs)).toContain('"language":"en"')
   })
+
+  it('persists the more_or_less loss record within the UTC day and clears it with the day', () => {
+    const progress = useLocalProgress()
+    progress.load()
+    progress.markFinished('more_or_less', 'lost', 4, {
+      loss: { round: 2, given: 'more', correct: 'less', hidden: 7, visible: 12 },
+    })
+
+    const reloaded = useLocalProgress()
+    reloaded.load()
+    expect(reloaded.getGameState('more_or_less')).toMatchObject({
+      status: 'lost',
+      attempts: 4,
+      loss: { round: 2, given: 'more', correct: 'less', hidden: 7, visible: 12 },
+    })
+
+    // A previous day's loss never applies to today's board (FR-007 day scoping).
+    localStorage.setItem(
+      KEYS.progress,
+      JSON.stringify({
+        v: 1,
+        date: '2020-01-01',
+        games: {
+          more_or_less: {
+            status: 'lost',
+            attempts: 2,
+            loss: { round: 0, given: 'less', correct: 'more', hidden: 4, visible: 3 },
+          },
+        },
+      }),
+    )
+    const nextDay = useLocalProgress()
+    nextDay.load()
+    expect(nextDay.getGameState('more_or_less')).toBeUndefined()
+
+    // A malformed loss record is dropped on read while the lost status survives,
+    // so a corrupt entry degrades to the plain result, never an error (FR-011).
+    localStorage.setItem(
+      KEYS.progress,
+      JSON.stringify({
+        v: 1,
+        date: getUtcDateNow(),
+        games: {
+          more_or_less: { status: 'lost', attempts: 2, loss: { round: 11, given: 'up', hidden: 1 } },
+        },
+      }),
+    )
+    const sanitized = useLocalProgress()
+    sanitized.load()
+    expect(sanitized.getGameState('more_or_less')?.status).toBe('lost')
+    expect(sanitized.getGameState('more_or_less')?.loss).toBeUndefined()
+  })
 })

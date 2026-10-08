@@ -22,3 +22,15 @@ describe('image message keys', () => {
     expect(es['match.placeholder']).not.toContain('Sin imagen:')
   })
 })
+
+describe('more_or_less loss explanation copy', () => {
+  it('keeps the reveal label in both locales and removes the Spanish reveal typo', () => {
+    expect(en['more_or_less.answer.more']).toBeTruthy()
+    expect(es['more_or_less.answer.more']).toBeTruthy()
+    expect(en['more_or_less.answer.less']).toBeTruthy()
+    expect(es['more_or_less.answer.less']).toBeTruthy()
+    expect(en['more_or_less.reveal']).toContain('{count}')
+    expect(es['more_or_less.reveal']).toContain('{count}')
+    expect(es['more_or_less.reveal']).not.toContain('Tinha')
+  })
+})

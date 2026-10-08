@@ -36,7 +36,7 @@ export const es = {
   'more_or_less.answer.less': 'Menos',
   'more_or_less.correct': '¡Correcto!',
   'more_or_less.wrong': 'Incorrecto',
-  'more_or_less.reveal': 'Tinha {count} roles',
+  'more_or_less.reveal': 'Tenía {count} roles',
   'match.board': 'Series de la temporada actual',
   'match.clue': 'Pista',
   'match.clue.character': 'Personaje',
