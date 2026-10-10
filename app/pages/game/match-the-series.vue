@@ -11,6 +11,7 @@ import {
   type AttemptErrorCode,
 } from '~/composables/attemptFailure'
 import { useLocalProgress } from '~/composables/useLocalProgress'
+import { useMatchTimer } from '~/composables/useMatchTimer'
 import { applyMatchAnswer, nextUnansweredIndex } from '~/utils/matchState'
 
 const { t } = useLocale()
@@ -20,55 +21,107 @@ const { data: puzzle, pending, error, refresh } = await useFetch<MatchTheSeriesP
   '/api/daily/match_the_series',
 )
 
-onMounted(() => {
-  progress.load()
-})
-
 const gameState = computed(() => progress.getGameState('match_the_series'))
 const finished = computed(
   () => gameState.value?.status === 'won' || gameState.value?.status === 'lost',
 )
+// Set the moment the clock hits zero so the board locks even if the reveal request must be
+// retried (the game is over; only the disclosure is pending).
+const timeExpired = ref(false)
+const boardLocked = computed(() => finished.value || timeExpired.value)
 
 const greenSeries = computed(() => gameState.value?.greenSeries ?? [])
 const answeredClues = computed(() => gameState.value?.answeredClues ?? [])
 const clueIndex = computed(() => gameState.value?.clueIndex ?? 0)
-const wrongClicks = computed(() => gameState.value?.wrongClicks ?? 0)
 const attempts = computed(() => gameState.value?.attempts ?? 0)
-// Constitution IV: the server re-derives the green set and the miss count from these
-// evidence lists against the answer key, which is never sent to the device.
+// Constitution IV: the server re-derives the green set from these evidence pairs against the
+// answer key, which is never sent to the device.
 const greenPairs = computed(
   () => gameState.value?.greenPairs ?? ([] as Array<{ clueKey: string; seriesKey: string }>),
 )
-const missLog = computed(
-  () => gameState.value?.missLog ?? ([] as Array<{ clueKey: string; seriesKey: string }>),
-)
+// FR-007: the time-out reveal lives in the day's progress entry, so it survives a reload instead
+// of vanishing with the component.
+const revealed = computed(() => gameState.value?.revealedAnswers ?? null)
 
 const busy = ref(false)
-const revealed = ref<Record<string, string> | null>(null)
-// Principle V: a rejected or failed attempt is a visible state with a retry.
+// Principle V: a rejected/failed answer and a failed time-out reveal are visible, retryable states.
 const attemptError = ref<AttemptErrorCode | null>(null)
+const expireError = ref<AttemptErrorCode | null>(null)
+const expiring = ref(false)
 const lastSeriesKey = ref<string | null>(null)
 
 const currentClue = computed(() => puzzle.value?.clues[clueIndex.value] ?? null)
 
-// FR-043a: board position is written on every accepted answer, never on a Next press.
-const persist = (state: 'in_progress' | 'won' | 'lost', next: Partial<typeof gameState.value>) => {
+// Writes the current board wholesale (setGameState replaces the entry), so the timer and reveal
+// fields must be carried explicitly or a write would silently drop them.
+function writeBoard(overrides: Partial<NonNullable<typeof gameState.value>> = {}) {
   progress.setGameState('match_the_series', {
-    status: state,
+    status: gameState.value?.status ?? 'in_progress',
     attempts: attempts.value,
     greenSeries: greenSeries.value,
     answeredClues: answeredClues.value,
     greenPairs: greenPairs.value,
-    missLog: missLog.value,
     clueIndex: clueIndex.value,
-    wrongClicks: wrongClicks.value,
-    ...next,
+    timerRemainingMs: gameState.value?.timerRemainingMs,
+    revealedAnswers: gameState.value?.revealedAnswers,
+    endedAt: gameState.value?.endedAt,
+    ...overrides,
   })
+}
+
+// The timer persists its remaining time at most once per displayed second.
+const persistTimer = (remainingMs: number) => writeBoard({ timerRemainingMs: remainingMs })
+
+// FR-006/FR-007: reaching zero ends the day's game and reveals every clue's series.
+const expire = async () => {
+  if (finished.value || expiring.value) {
+    return
+  }
+  expiring.value = true
+  expireError.value = null
+  try {
+    const res = await fetch('/api/daily/match_the_series/expire', { method: 'POST' })
+    if (!res.ok) {
+      expireError.value = await readErrorCode(res)
+      return
+    }
+    const body = (await res.json()) as { answers: Record<string, string> }
+    writeBoard({
+      status: 'lost',
+      timerRemainingMs: 0,
+      revealedAnswers: body.answers,
+      endedAt: new Date().toISOString(),
+    })
+    timer.pause()
+  } catch {
+    expireError.value = 'DATABASE_UNAVAILABLE'
+  } finally {
+    expiring.value = false
+  }
+}
+
+const timer = useMatchTimer({
+  finished,
+  persist: persistTimer,
+  onExpire: () => {
+    timeExpired.value = true
+    void expire()
+  },
+})
+// A top-level ref auto-unwraps in the template.
+const remaining = timer.label
+
+// FR-043a: board position is written on every accepted answer, never on a Next press.
+const persist = (
+  state: 'in_progress' | 'won' | 'lost',
+  next: Partial<NonNullable<typeof gameState.value>>,
+) => {
+  writeBoard({ status: state, ...next })
 }
 
 const answer = async (seriesKey: string) => {
   const clue = currentClue.value
-  if (busy.value || finished.value || !clue || !puzzle.value) {
+  if (busy.value || boardLocked.value || !clue || !puzzle.value) {
     return
   }
   busy.value = true
@@ -82,7 +135,6 @@ const answer = async (seriesKey: string) => {
         seriesKey,
         // Constitution IV: progress travels as verifiable evidence, never as counters.
         greenPairs: greenPairs.value,
-        missLog: missLog.value,
       }),
     })
     if (!res.ok) {
@@ -93,15 +145,11 @@ const answer = async (seriesKey: string) => {
       return
     }
     const outcome = (await res.json()) as MatchTheSeriesOutcome
-    if (outcome.result === 'miss' && outcome.state === 'lost') {
-      // FR-027: the ending miss reveals every pairing.
-      revealed.value = 'answers' in outcome ? outcome.answers : null
-    }
+    // FR-001: a wrong answer never ends the game, so there is nothing to reveal here.
 
     // The whole board lives in the device store, and setGameState replaces the entry
-    // wholesale, so every transition writes the complete state — including the two evidence
-    // lists the server re-derives the miss count and the green set from. Dropping them would
-    // silently let the mistake limit and the win condition slip (Constitution IV).
+    // wholesale, so every transition writes the complete state — including the green evidence
+    // the server re-derives the win from and the timer/reveal fields a reload needs.
     const next = applyMatchAnswer(
       {
         status: gameState.value?.status ?? 'in_progress',
@@ -109,9 +157,9 @@ const answer = async (seriesKey: string) => {
         greenSeries: greenSeries.value,
         answeredClues: answeredClues.value,
         clueIndex: clueIndex.value,
-        wrongClicks: wrongClicks.value,
         greenPairs: greenPairs.value,
-        missLog: missLog.value,
+        timerRemainingMs: gameState.value?.timerRemainingMs,
+        revealedAnswers: gameState.value?.revealedAnswers,
         endedAt: gameState.value?.endedAt,
       },
       puzzle.value.clues,
@@ -138,7 +186,7 @@ const retry = () => {
 // FR-026b / FR-026c: a free skip to a different, unanswered card. No request, and neither
 // the attempt count nor the mistake count moves (R-021).
 const skip = () => {
-  if (finished.value || !puzzle.value) {
+  if (boardLocked.value || !puzzle.value) {
     return
   }
   const index = nextUnansweredIndex(
@@ -156,6 +204,16 @@ const resultState = computed(() => {
   if (gameState.value?.status === 'won') return 'won' as const
   if (gameState.value?.status === 'lost') return 'lost' as const
   return null
+})
+
+onMounted(() => {
+  progress.load()
+  // FR-008: resume the stored remaining time (null means a fresh game), then run only while
+  // the day's game is still in progress.
+  timer.setRemaining(gameState.value?.timerRemainingMs ?? null)
+  if (!finished.value) {
+    timer.start()
+  }
 })
 </script>
 
@@ -175,7 +233,13 @@ const resultState = computed(() => {
 
     <template v-else>
       <ErrorPanel
-        v-if="attemptError"
+        v-if="expireError"
+        :code="expireError"
+        :pending="expiring"
+        :retry="() => expire()"
+      />
+      <ErrorPanel
+        v-else-if="attemptError"
         :code="attemptError"
         :pending="busy"
         :retry="attemptError && isRetryableCode(attemptError) ? retry : undefined"
@@ -186,10 +250,11 @@ const resultState = computed(() => {
         :green-series="greenSeries"
         :answered-clues="answeredClues"
         :clue-index="clueIndex"
-        :wrong-clicks="wrongClicks"
         :attempts="attempts"
-        :finished="finished"
+        :finished="boardLocked"
         :busy="busy"
+        :remaining="remaining"
+        :time-up="resultState === 'lost'"
         :answers="revealed"
         @answer="answer"
         @next="skip"

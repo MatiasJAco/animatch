@@ -52,11 +52,11 @@ async function resolveAttempt(game: string, body: unknown) {
 
     // Constitution IV: the board lives on the device, so the server stores nothing
     // (FR-041, R-012). The device presents the pairs it has already scored and the server
-    // re-derives the green tiles and the mistake count from the stored answer key.
+    // re-derives the green tiles from the stored answer key.
     const attempt = parseMatchAttempt((body ?? {}) as MatchTheSeriesAttemptBody)
-    const progress = verifyMatchProgress(solution, attempt.greenPairs, attempt.missLog)
-    // FR-026: the outcome echoes the clicked pair and nothing else, so the evidence lists
-    // stay on this side of the boundary.
+    const progress = verifyMatchProgress(solution, attempt.greenPairs)
+    // FR-026: the outcome echoes the clicked pair and nothing else, so the evidence list
+    // stays on this side of the boundary.
     return {
       outcome: resolveMatchOutcome(payload, solution, {
         clueKey: attempt.clueKey,

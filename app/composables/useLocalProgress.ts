@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { isGameId, type GameId } from '~~/server/game/ids'
 import { getUtcDateNow, type PuzzleDate } from '~~/server/utils/day'
 import { isLossRecord, type MoreOrLessLossRecord } from '~/utils/moreOrLessLoss'
+import { clampRemaining } from '~/utils/matchTimer'
 
 const STORAGE_KEY = 'animatch:v1:progress'
 
@@ -18,13 +19,15 @@ export interface LocalGameState {
   answeredClues?: string[]
   // match_the_series: index of the clue card currently on screen.
   clueIndex?: number
-  // match_the_series: wrong clicks so far, three ends the game.
-  wrongClicks?: number
   // match_the_series: the clue card and series that earned each green tile. The server
   // re-derives the green set from these against the answer key it never sends (Principle IV).
   greenPairs?: Array<{ clueKey: string; seriesKey: string }>
-  // match_the_series: the rejected pairings, from which the server re-derives the miss count.
-  missLog?: Array<{ clueKey: string; seriesKey: string }>
+  // match_the_series: remaining play time in ms, kept so the 90-second countdown resumes across
+  // reloads instead of restarting or draining (FR-008). Clamped to [0, 90_000] on read.
+  timerRemainingMs?: number
+  // match_the_series: the full clue->series mapping, stored only once a time-out has ended the
+  // game so the reveal survives a reload (parity with Groups' foundGroups).
+  revealedAnswers?: Record<string, string>
   found?: string[]
   // Groups keeps the revealed criterion per found group so a resumed board can show it again.
   foundGroups?: Array<{ keys: string[]; criterion: unknown }>
@@ -55,6 +58,9 @@ function sanitize(progress: LocalProgress): LocalProgress {
     const state = progress.games[id]
     if (state && !isLossRecord(state.loss)) {
       delete state.loss
+    }
+    if (state && typeof state.timerRemainingMs === 'number') {
+      state.timerRemainingMs = clampRemaining(state.timerRemainingMs)
     }
   }
   return progress

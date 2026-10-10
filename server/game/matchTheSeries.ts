@@ -1,4 +1,3 @@
-export const MATCH_WRONG_LIMIT = 3
 export const MATCH_BOARD_SIZE = 9
 // R-019: two cards per grid series, so every tile keeps a second correct route
 // and the Next control never dead-ends.
@@ -29,7 +28,6 @@ export interface MatchTheSeriesPayloadData {
   season: { season: string; year: number }
   grid: MatchTheSeriesGrid
   clues: MatchTheSeriesClue[]
-  wrongLimit: number
 }
 
 export interface MatchTheSeriesSolution {
@@ -40,11 +38,9 @@ export interface MatchTheSeriesAttemptBody {
   clueKey?: unknown
   seriesKey?: unknown
   // Constitution IV: the board lives on the device, so the server cannot see how many tiles
-  // are green. It can check a claim against the stored solution, which never reaches the
-  // client, so the device presents the pairs it has already scored rather than a bare
-  // `green` key list and a `misses` integer that would simply be believed.
+  // are green. It checks the pairs the device presents against the stored solution, which never
+  // reaches the client, rather than believing a bare `green` key list.
   greenPairs?: unknown
-  missLog?: unknown
 }
 
 export interface MatchTheSeriesOutcomeHit {
@@ -54,28 +50,15 @@ export interface MatchTheSeriesOutcomeHit {
   state: 'in_progress' | 'won'
 }
 
-// FR-027a: below the mistake limit nothing is disclosed about the correct series.
-export interface MatchTheSeriesOutcomeMissInPlay {
+// FR-001: a wrong answer never ends the game and discloses nothing about the correct series.
+export interface MatchTheSeriesOutcomeMiss {
   result: 'miss'
   clueKey: string
   seriesKey: string
   state: 'in_progress'
 }
 
-// FR-027: the ending miss discloses this pairing and the full mapping.
-export interface MatchTheSeriesOutcomeMissEnded {
-  result: 'miss'
-  clueKey: string
-  seriesKey: string
-  correctSeriesKey: string
-  answers: Record<string, string>
-  state: 'lost'
-}
-
-export type MatchTheSeriesOutcome =
-  | MatchTheSeriesOutcomeHit
-  | MatchTheSeriesOutcomeMissInPlay
-  | MatchTheSeriesOutcomeMissEnded
+export type MatchTheSeriesOutcome = MatchTheSeriesOutcomeHit | MatchTheSeriesOutcomeMiss
 
 export class MatchInvalidAttemptError extends Error {
   readonly code = 'INVALID_ATTEMPT' as const
@@ -87,7 +70,6 @@ export function parseMatchAttempt(body: MatchTheSeriesAttemptBody): {
   clueKey: string
   seriesKey: string
   greenPairs: MatchScoredPair[]
-  missLog: MatchScoredPair[]
 } {
   const clueKey = body?.clueKey
   const seriesKey = body?.seriesKey
@@ -97,8 +79,7 @@ export function parseMatchAttempt(body: MatchTheSeriesAttemptBody): {
   return {
     clueKey,
     seriesKey,
-    greenPairs: parseScoredPairs(body?.greenPairs, 'greenPairs'),
-    missLog: parseScoredPairs(body?.missLog, 'missLog'),
+    greenPairs: parseScoredPairs(body?.greenPairs),
   }
 }
 
@@ -107,12 +88,12 @@ export interface MatchScoredPair {
   seriesKey: string
 }
 
-function parseScoredPairs(value: unknown, field: string): MatchScoredPair[] {
+function parseScoredPairs(value: unknown): MatchScoredPair[] {
   if (value === undefined || value === null) {
     return []
   }
   if (!Array.isArray(value)) {
-    throw new MatchInvalidAttemptError(`${field} must be a list of scored pairs`)
+    throw new MatchInvalidAttemptError('greenPairs must be a list of scored pairs')
   }
   return value.map((entry) => {
     if (
@@ -121,7 +102,7 @@ function parseScoredPairs(value: unknown, field: string): MatchScoredPair[] {
       typeof (entry as MatchScoredPair).clueKey !== 'string' ||
       typeof (entry as MatchScoredPair).seriesKey !== 'string'
     ) {
-      throw new MatchInvalidAttemptError(`${field} holds a malformed pair`)
+      throw new MatchInvalidAttemptError('greenPairs holds a malformed pair')
     }
     return { clueKey: (entry as MatchScoredPair).clueKey, seriesKey: (entry as MatchScoredPair).seriesKey }
   })
@@ -129,26 +110,17 @@ function parseScoredPairs(value: unknown, field: string): MatchScoredPair[] {
 
 export interface MatchVerifiedProgress {
   green: Set<string>
-  misses: number
 }
 
 /**
  * Constitution IV: re-derives the board from the stored solution.
  *
  * The answer key is never sent to the client, so a claimed green tile only survives if the
- * device can present the clue card that genuinely answers for it, and a logged miss only
- * survives if that pairing is genuinely wrong. A bare `green` list or `misses` count can no
- * longer decide the outcome.
- *
- * FR-027d keeps an abandoned card in the pool, so the same clue may be missed twice and is
- * deliberately not deduplicated. FR-035 counts mistakes on the device by design (R-013), and
- * with no stored state the server cannot separate a repeated real miss from a padded one;
- * that residual belongs to the stateless contract, not to this check.
+ * device can present the clue card that genuinely answers for it.
  */
 export function verifyMatchProgress(
   solution: MatchTheSeriesSolution,
   greenPairs: readonly MatchScoredPair[],
-  missLog: readonly MatchScoredPair[],
 ): MatchVerifiedProgress {
   const green = new Set<string>()
   for (const pair of greenPairs) {
@@ -158,22 +130,12 @@ export function verifyMatchProgress(
     green.add(pair.seriesKey)
   }
 
-  for (const pair of missLog) {
-    const correct = solution.answers[pair.clueKey]
-    if (correct === undefined) {
-      throw new MatchInvalidAttemptError('a logged miss references an unknown clue card')
-    }
-    if (correct === pair.seriesKey) {
-      throw new MatchInvalidAttemptError('a logged miss is actually a correct pairing')
-    }
-  }
-
-  return { green, misses: missLog.length }
+  return { green }
 }
 
 /**
- * Validates the answer against the stored puzzle only; the server holds no game state,
- * so the caller presents its board as evidence the server re-derives. The Next control
+ * Validates the answer against the stored puzzle only; the server holds no game state around
+ * mistakes, so a wrong answer always leaves the game in progress (FR-001). The Next control
  * never reaches this function: it is a client-side skip, not an answer (FR-026b).
  */
 export function resolveMatchOutcome(
@@ -201,16 +163,18 @@ export function resolveMatchOutcome(
     return { result: 'hit', ...attempt, state: won ? 'won' : 'in_progress' }
   }
 
-  const misses = progress.misses + 1
-  if (misses >= payload.wrongLimit) {
-    return {
-      result: 'miss',
-      ...attempt,
-      correctSeriesKey,
-      answers: solution.answers,
-      state: 'lost',
-    }
-  }
-
+  // FR-001: mistakes are unlimited; the countdown, not a mistake cap, ends the game.
   return { result: 'miss', ...attempt, state: 'in_progress' }
+}
+
+// FR-006: the time-out ending reveals the withheld mapping. The server is stateless, so this is
+// derived on demand from the stored solution rather than persisted.
+export interface MatchExpireOutcome {
+  result: 'expired'
+  state: 'lost'
+  answers: Record<string, string>
+}
+
+export function resolveMatchExpire(solution: MatchTheSeriesSolution): MatchExpireOutcome {
+  return { result: 'expired', state: 'lost', answers: solution.answers }
 }

@@ -11,9 +11,11 @@ export interface MatchBoardState {
   greenSeries: string[]
   answeredClues: string[]
   clueIndex: number
-  wrongClicks: number
   greenPairs: MatchScoredPair[]
-  missLog: MatchScoredPair[]
+  // FR-008: remaining play time, carried through every write.
+  timerRemainingMs?: number
+  // FR-007: the time-out reveal, carried through every write so a reload keeps it.
+  revealedAnswers?: Record<string, string>
   endedAt?: string
 }
 
@@ -45,9 +47,11 @@ export function nextUnansweredIndex(
  * The one place that turns an accepted attempt outcome into the next device-stored board.
  *
  * `useLocalProgress.setGameState` replaces the whole entry, so every transition must write the
- * complete state. In particular the two evidence lists the server re-derives from must be
- * carried forward (Constitution IV): a hit never clears `missLog`, or the mistake limit would
- * reset, and a miss never clears `greenPairs`, or the win condition could never be proven.
+ * complete state — including the green evidence the server re-derives from (Constitution IV) and
+ * the timer/reveal fields the countdown and the time-out ending need to survive a reload.
+ *
+ * FR-001: a wrong answer never ends the game; only nine green tiles (won) or a time-out (lost,
+ * written elsewhere) finish it.
  */
 export function applyMatchAnswer(
   state: MatchBoardState,
@@ -71,29 +75,23 @@ export function applyMatchAnswer(
       clueIndex: won
         ? state.clueIndex
         : nextUnansweredIndex(clues, answeredClues, state.clueIndex),
-      wrongClicks: state.wrongClicks,
       greenPairs: state.greenPairs.some((pair) => pair.clueKey === answer.clueKey)
         ? state.greenPairs
         : [...state.greenPairs, answer],
-      missLog: state.missLog,
+      timerRemainingMs: state.timerRemainingMs,
+      revealedAnswers: state.revealedAnswers,
       ...(won ? { endedAt: new Date().toISOString() } : {}),
     }
   }
 
-  const wrongClicks = state.wrongClicks + 1
-  const missLog = [...state.missLog, answer]
-  const lost = outcome.state === 'lost'
   return {
-    status: lost ? 'lost' : 'in_progress',
+    status: 'in_progress',
     attempts,
     greenSeries: state.greenSeries,
     answeredClues: state.answeredClues,
-    clueIndex: lost
-      ? state.clueIndex
-      : nextUnansweredIndex(clues, state.answeredClues, state.clueIndex),
-    wrongClicks,
+    clueIndex: nextUnansweredIndex(clues, state.answeredClues, state.clueIndex),
     greenPairs: state.greenPairs,
-    missLog,
-    ...(lost ? { endedAt: new Date().toISOString() } : {}),
+    timerRemainingMs: state.timerRemainingMs,
+    revealedAnswers: state.revealedAnswers,
   }
 }

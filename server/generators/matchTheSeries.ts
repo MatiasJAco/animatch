@@ -10,7 +10,6 @@ import { shuffle } from '../utils/shuffle'
 import {
   MATCH_BOARD_SIZE,
   MATCH_CLUE_COUNT,
-  MATCH_WRONG_LIMIT,
   type MatchTheSeriesClue,
   type MatchTheSeriesPayloadData,
   type MatchTheSeriesSeries,
@@ -262,7 +261,6 @@ export async function generateMatchTheSeries(
       season: { season: seasonInfo.season, year: seasonInfo.year },
       grid: { rows: 3, cols: 3, series: gridSeries },
       clues: deck.clues,
-      wrongLimit: MATCH_WRONG_LIMIT,
     }
     return {
       payload: { signature: sig, data: payloadData },

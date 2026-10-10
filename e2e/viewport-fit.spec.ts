@@ -279,27 +279,45 @@ async function forceAttemptError(page: Page, game: GameKey): Promise<void> {
   )
 }
 
-async function routeMatchLoss(page: Page): Promise<void> {
+async function routeMatchTimeout(page: Page): Promise<void> {
   const payload = await (await page.request.get('/api/daily/match_the_series')).json()
   const answers: Record<string, string> = {}
   for (const clue of payload.clues as Array<{ key: string }>) {
     answers[clue.key] = payload.grid.series[0].key
   }
-  await page.route(ATTEMPT_URL.match, async (route) => {
-    const body = (route.request().postDataJSON() ?? {}) as { clueKey?: string; seriesKey?: string }
-    await route.fulfill({
+  await page.route('**/api/daily/match_the_series/expire', (route) =>
+    route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        result: 'miss',
-        state: 'lost',
-        clueKey: body.clueKey,
-        seriesKey: body.seriesKey,
-        correctSeriesKey: payload.grid.series[0].key,
-        answers,
+      body: JSON.stringify({ result: 'expired', state: 'lost', answers }),
+    }),
+  )
+}
+
+// Seeds a near-zero remaining time so the countdown reaches zero without a real 90-second wait.
+async function seedMatchTimer(page: Page, remainingMs: number): Promise<void> {
+  await page.evaluate((ms) => {
+    const key = 'animatch:v1:progress'
+    const day = new Date().toISOString().slice(0, 10)
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        v: 1,
+        date: day,
+        games: {
+          match_the_series: {
+            status: 'in_progress',
+            attempts: 0,
+            greenSeries: [],
+            answeredClues: [],
+            clueIndex: 0,
+            greenPairs: [],
+            timerRemainingMs: ms,
+          },
+        },
       }),
-    })
-  })
+    )
+  }, remainingMs)
 }
 
 async function routeGroupsLoss(page: Page): Promise<void> {
@@ -415,18 +433,21 @@ test.describe('board-first layout', () => {
       await page.waitForSelector('.game-list .card')
       await clearProgress(page)
 
-      // Match loss in session: the reveal list stays inside the board region, above the meta.
+      // Match time-out in session: the reveal list stays inside the board region, above the meta.
       await page.goto(ROUTES.match)
       await page.waitForSelector(READY.match)
-      await routeMatchLoss(page)
-      await attemptUntil(page, 'match', '.reveal-list')
+      await routeMatchTimeout(page)
+      await seedMatchTimer(page, 800)
+      await page.reload()
+      await page.waitForSelector('.reveal-list')
       await assertBoardFirst(page, 'match')
       await noHorizontalScroll(page)
       await withinNoHorizontalOverflow(page)
 
-      // Match finished after reload.
+      // Match finished after reload: the persisted reveal survives.
       await page.reload()
       await page.waitForSelector('.share-text')
+      await page.waitForSelector('.reveal-list')
       await assertBoardFirst(page, 'match')
       await noHorizontalScroll(page)
 

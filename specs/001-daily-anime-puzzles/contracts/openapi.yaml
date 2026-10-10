@@ -105,7 +105,6 @@ paths:
                     clues:
                       - { key: "c:12345", kind: character, name: "Character A" }
                       - { key: "p:678", kind: person, name: "Person D" }
-                    wrongLimit: 3
                 groups:
                   summary: Groups, 16 tiles with no criterion data
                   value:
@@ -195,25 +194,15 @@ paths:
                 matchTheSeriesHit:
                   summary: Correct click, the tile turns green
                   value: { result: hit, clueKey: "c:12345", seriesKey: "a:9001", state: in_progress }
-                matchTheSeriesMissInPlay:
-                  summary: Wrong click below the limit, nothing revealed
+                matchTheSeriesMiss:
+                  summary: Wrong click, nothing revealed, game stays in progress
                   description: |
-                    No correctSeriesKey and no answers map are present. The clicked tile stays
-                    uncolored. The client then rotates the clue card to another entity and keeps
-                    the abandoned entity eligible for a later rotation or Next (FR-027c, FR-027d);
-                    that rotation is client-side and needs no request. This response is unchanged
-                    by the rotation.
+                    Mistakes are unlimited, so a wrong click never ends the game and never
+                    discloses the correct series. The clicked tile stays uncolored. The client
+                    then rotates the clue card to another entity and keeps the abandoned entity
+                    eligible for a later rotation or Next (FR-027c, FR-027d); that rotation is
+                    client-side and needs no request.
                   value: { result: miss, clueKey: "c:12345", seriesKey: "a:9102", state: in_progress }
-                matchTheSeriesGameOver:
-                  summary: Wrong click that ends the game, pairings revealed
-                  value:
-                    result: miss
-                    clueKey: "c:12345"
-                    seriesKey: "a:9102"
-                    correctSeriesKey: "a:9001"
-                    answers: { "c:12345": "a:9001", "p:678": "a:9102" }
-                    remainingWrong: 0
-                    state: lost
                 groupsHit:
                   summary: Correct group, criterion disclosed
                   value:
@@ -257,6 +246,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
+                database:
+                  value: { error: { code: DATABASE_UNAVAILABLE, message: The puzzle could not be loaded. } }
+
+  /daily/match_the_series/expire:
+    post:
+      operationId: expireMatchTheSeries
+      summary: End the day's Match the Series game by time-out and reveal the mapping
+      description: |
+        Stateless by design. The client reports that its 90-second countdown reached zero; the
+        server returns the withheld clue-to-series mapping and a lost state, matching the reveal a
+        mistake ending used to carry before this change. Nothing is stored and no session is
+        created (Constitution IV). Without server state the elapsed time cannot be verified, so
+        this is a device assertion.
+      responses:
+        "200":
+          description: The time-out ending and the full mapping.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchExpireOutcome"
+              examples:
+                expired:
+                  value:
+                    result: expired
+                    state: lost
+                    answers: { "c:12345": "a:9001", "p:678": "a:9102" }
+        "503":
+          description: The puzzle could not be produced or the catalog is unreachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                unavailable:
+                  value: { error: { code: PUZZLE_UNAVAILABLE, message: No puzzle available for today. } }
                 database:
                   value: { error: { code: DATABASE_UNAVAILABLE, message: The puzzle could not be loaded. } }
 
@@ -382,7 +406,7 @@ components:
 
     MatchTheSeriesPuzzle:
       type: object
-      required: [game, date, season, grid, clues, wrongLimit]
+      required: [game, date, season, grid, clues]
       properties:
         game: { type: string, enum: [match_the_series] }
         date: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
@@ -429,7 +453,6 @@ components:
               key: { type: string, description: "Kind-prefixed so a character and a person cannot collide." }
               kind: { type: string, enum: [character, person] }
               name: { type: string }
-        wrongLimit: { type: integer, const: 3 }
 
     GroupsPuzzle:
       type: object
@@ -469,6 +492,18 @@ components:
           type: string
           description: The clue card that was on screen, so the answer is scored against it.
         seriesKey: { type: string, description: The grid tile the visitor clicked. }
+        greenPairs:
+          type: array
+          description: |
+            The clue/series pairs already scored as green, presented as evidence. The server
+            re-derives the win from these against the stored answer key rather than trusting a
+            bare green list or a counter (Constitution IV).
+          items:
+            type: object
+            required: [clueKey, seriesKey]
+            properties:
+              clueKey: { type: string }
+              seriesKey: { type: string }
 
     GroupsAttempt:
       type: object
@@ -507,26 +542,27 @@ components:
         result: { type: string, enum: [hit, miss] }
         clueKey: { type: string }
         seriesKey: { type: string }
-        correctSeriesKey:
+        state:
           type: string
+          enum: [in_progress, won]
           description: |
-            Present only when the miss ends the game. Absent on every miss that leaves the game in
-            play, so that a wrong click below the mistake limit discloses no pairing at all, and so
-            that the client's post-mistake rotation to another entity cannot be used to infer the
-            answer for the card it replaced (FR-027a, FR-027c, SC-018).
+            Advisory for the client's own progress tracking; the server holds no state. A wrong
+            answer is always in_progress: the only endings are nine green tiles (won) or the
+            countdown reaching zero (see POST /daily/match_the_series/expire). Mistakes are
+            unlimited, so no miss discloses the correct series.
+
+    MatchExpireOutcome:
+      type: object
+      required: [result, state, answers]
+      properties:
+        result: { type: string, const: expired }
+        state: { type: string, const: lost }
         answers:
           type: object
           additionalProperties: { type: string }
           description: |
-            Clue card key to series key, present only when the miss ends the game, so every pairing
-            can be revealed at that point (FR-027).
-        remainingWrong:
-          type: integer
-          description: Wrong clicks still available before the game ends. Absent unless the game ended.
-        state:
-          type: string
-          enum: [in_progress, won, lost]
-          description: Advisory for the client's own progress tracking; the server holds no state.
+            Clue card key to series key: the full withheld mapping, revealed only at the time-out
+            ending (the same disclosure the removed mistake ending used to carry).
 
     GroupsOutcome:
       type: object

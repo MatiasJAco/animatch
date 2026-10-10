@@ -24,7 +24,7 @@ describe('device state', () => {
     expect(reloaded.getGameState('match_the_series')).toBeUndefined()
 
     // FR-043a: a Match the Series board resumes with its green tiles, its answered
-    // cards, and both counters exactly as they were left.
+    // cards, and its remaining time exactly as they were left.
     const board = useLocalProgress()
     board.setGameState('match_the_series', {
       status: 'in_progress',
@@ -32,7 +32,7 @@ describe('device state', () => {
       greenSeries: ['a:9001', 'a:9102'],
       answeredClues: ['c:1', 'c:2'],
       clueIndex: 3,
-      wrongClicks: 1,
+      timerRemainingMs: 45_000,
     })
     const resumed = useLocalProgress()
     resumed.load()
@@ -41,7 +41,36 @@ describe('device state', () => {
       greenSeries: ['a:9001', 'a:9102'],
       answeredClues: ['c:1', 'c:2'],
       clueIndex: 3,
-      wrongClicks: 1,
+      timerRemainingMs: 45_000,
+    })
+
+    // FR-008: a stored timer value outside the limit is clamped on read.
+    resumed.setGameState('match_the_series', {
+      status: 'in_progress',
+      attempts: 4,
+      greenSeries: ['a:9001'],
+      answeredClues: ['c:1'],
+      clueIndex: 1,
+      timerRemainingMs: 999_999,
+    })
+    const clamped = useLocalProgress()
+    clamped.load()
+    expect(clamped.getGameState('match_the_series')?.timerRemainingMs).toBe(90_000)
+
+    // FR-007: the time-out reveal persists so it survives a reload.
+    resumed.setGameState('match_the_series', {
+      status: 'lost',
+      attempts: 6,
+      greenSeries: ['a:9001'],
+      answeredClues: ['c:1'],
+      clueIndex: 1,
+      revealedAnswers: { 'c:1': 'a:9001', 'c:2': 'a:9102' },
+    })
+    const afterTimeout = useLocalProgress()
+    afterTimeout.load()
+    expect(afterTimeout.getGameState('match_the_series')).toMatchObject({
+      status: 'lost',
+      revealedAnswers: { 'c:1': 'a:9001', 'c:2': 'a:9102' },
     })
 
     // FR-027c / FR-027d: a non-ending miss stores an advanced clueIndex with the
@@ -55,13 +84,13 @@ describe('device state', () => {
       greenSeries: ['a:9001', 'a:9102'],
       answeredClues: ['c:1', 'c:2'],
       clueIndex: 4,
-      wrongClicks: 2,
+      timerRemainingMs: 30_000,
     })
     const rotated = useLocalProgress()
     rotated.load()
     const rotatedState = rotated.getGameState('match_the_series')
     expect(rotatedState?.clueIndex).toBe(4)
-    expect(rotatedState?.wrongClicks).toBe(2)
+    expect(rotatedState?.timerRemainingMs).toBe(30_000)
     // The abandoned clue key is not recorded, so the pool still holds it.
     expect(rotatedState?.answeredClues).not.toContain('c:4')
     expect(rotatedState?.answeredClues).toEqual(['c:1', 'c:2'])
@@ -125,7 +154,6 @@ describe('device state', () => {
         greenSeries: ['a:9001'],
         answeredClues: ['c:1'],
         clueIndex: 1,
-        wrongClicks: 1,
       })
 
       resettable.resetGame('match_the_series')
@@ -165,7 +193,6 @@ describe('device state', () => {
         greenSeries: ['a:9001'],
         answeredClues: ['c:1'],
         clueIndex: 1,
-        wrongClicks: 1,
       })
       const writes: string[] = []
       const originalSetItem = localStorage.setItem.bind(localStorage)

@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import type {
   MatchTheSeriesClue,
-  MatchTheSeriesOutcome,
   MatchTheSeriesPayloadData,
 } from '~~/server/game/matchTheSeries'
 import { useLocale } from '~/composables/useLocale'
@@ -13,11 +12,14 @@ const props = defineProps<{
   greenSeries: string[]
   answeredClues: string[]
   clueIndex: number
-  wrongClicks: number
   attempts: number
   finished: boolean
   busy?: boolean
-  /** The full mapping, present only once the game has been lost. */
+  /** The two-digit countdown shown inside the clue card (FR-014). */
+  remaining: string
+  /** True once the day's game ended by running out of time. */
+  timeUp?: boolean
+  /** The full mapping, present only once the game has ended. */
   answers?: Record<string, string> | null
 }>()
 
@@ -90,8 +92,8 @@ const revealedPairings = computed(() =>
 </script>
 
 <template>
-  <!-- Feature 007: the clue + grid come first; the mistakes bar and the how-to-play line follow
-       the grid. -->
+  <!-- Feature 007: the clue + grid come first; the status/help line follows the grid.
+       Feature 009: the countdown badge lives inside the clue card. -->
   <div class="game-play">
     <div class="game-board">
       <!-- The clue and the Next control share one row so the board gets the freed height. -->
@@ -111,6 +113,8 @@ const revealedPairings = computed(() =>
             <p class="clue-card__name">{{ clue.name }}</p>
             <p v-if="answers" class="clue-card__name">{{ seriesForClue(clue.key) }}</p>
           </div>
+          <!-- FR-014: the countdown sits inside the clue card, right-aligned, two digits in a circle. -->
+          <span class="clue-card__timer" role="timer" :aria-label="t('match.timer')">{{ remaining }}</span>
           <p v-if="clueArt && !clueArt.available" class="muted">{{ t('match.placeholder') }}</p>
         </div>
 
@@ -124,7 +128,8 @@ const revealedPairings = computed(() =>
         </div>
       </div>
 
-      <div v-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
+      <div v-if="timeUp" class="feedback--wrong">{{ t('match.time_up') }}</div>
+      <div v-else-if="answers" class="feedback--wrong">{{ t('match.game_over') }}</div>
       <p v-else-if="lastFeedback === 'miss'" class="feedback--wrong">{{ t('match.wrong') }}</p>
       <p v-else-if="lastFeedback === 'hit'" class="feedback--correct">{{ t('match.green') }}</p>
 
@@ -166,8 +171,6 @@ const revealedPairings = computed(() =>
 
   <footer class="game-meta">
     <p class="badge">
-      {{ t('match.mistakes', { current: wrongClicks, max: puzzle.wrongLimit }) }}
-      &middot;
       {{ t('result.attempts', { count: attempts }) }}
     </p>
     <p class="muted">{{ t('game.match_the_series.help') }}</p>

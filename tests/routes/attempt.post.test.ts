@@ -31,25 +31,6 @@ import {
 
 const connectionString = process.env.DATABASE_URL ?? ''
 
-// A claim about previous misses is only accepted when each entry is a real wrong pairing,
-// so a test that needs the ending miss has to build a genuine log.
-function repeatedMisses(
-  solution: MatchTheSeriesSolution,
-  payload: MatchTheSeriesPayloadData,
-  clueKey: string,
-  wrongSeriesKey: string,
-  count: number,
-): Array<{ clueKey: string; seriesKey: string }> {
-  const pool: Array<{ clueKey: string; seriesKey: string }> = []
-  for (const clue of payload.clues) {
-    if (pool.length >= count) break
-    if (clue.key === clueKey) continue
-    const wrong = payload.grid.series.find((s) => s.key !== solution.answers[clue.key])
-    if (wrong) pool.push({ clueKey: clue.key, seriesKey: wrong.key })
-  }
-  return pool
-}
-
 describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
   const date = isolatedPuzzleDate(1)
   const matchDate = isolatedPuzzleDate(6)
@@ -104,7 +85,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
     expect(reread?.game).toBe('more_or_less')
   })
 
-  it('keeps non-ending match misses silent and discloses the pairing only on the third', async () => {
+  it('never ends a match the Series game on a miss and discloses nothing about the answer', async () => {
     const row = await getOrCreateDailyPuzzle('match_the_series', matchDate, () =>
       generateMatchTheSeries(
         'match_the_series',
@@ -124,55 +105,38 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
       payload,
       solution,
       { clueKey: clue.key, seriesKey: rightSeriesKey },
-      verifyMatchProgress(solution, [], []),
+      verifyMatchProgress(solution, []),
     )
     expect(hit.result).toBe('hit')
     expect(hit.state).toBe('in_progress')
-    // FR-026: a hit discloses the clicked series and nothing else. The evidence lists the
+    // FR-026: a hit discloses the clicked series and nothing else. The evidence list the
     // device sends must never be echoed back in the outcome.
     expect(hit.seriesKey).toBe(rightSeriesKey)
     expect(Object.keys(hit).sort()).toEqual(['clueKey', 'result', 'seriesKey', 'state'])
 
-    // FR-027a: a wrong click below the limit reveals nothing about the answer.
-    const quietMiss = resolveMatchOutcome(
-      payload,
-      solution,
-      { clueKey: clue.key, seriesKey: wrongSeriesKey },
-      verifyMatchProgress(solution, [], []),
-    )
-    expect(quietMiss.result).toBe('miss')
-    expect(quietMiss.state).toBe('in_progress')
-    expect(Object.keys(quietMiss)).not.toContain('correctSeriesKey')
-    expect(Object.keys(quietMiss)).not.toContain('answers')
+    // FR-001: mistakes are unlimited. Five wrong clicks all stay in progress and none reveals
+    // the correct series or the full mapping.
+    for (let index = 0; index < 5; index += 1) {
+      const miss = resolveMatchOutcome(
+        payload,
+        solution,
+        { clueKey: clue.key, seriesKey: wrongSeriesKey },
+        verifyMatchProgress(solution, []),
+      )
+      expect(miss.result).toBe('miss')
+      expect(miss.state).toBe('in_progress')
+      expect(Object.keys(miss).sort()).toEqual(['clueKey', 'result', 'seriesKey', 'state'])
+      expect(Object.keys(miss)).not.toContain('correctSeriesKey')
+      expect(Object.keys(miss)).not.toContain('answers')
+    }
 
-    // FR-027c: the rotation is decided on the device, so the miss response carries no
-    // next card and no rotation directive. It only echoes the pair the visitor clicked.
-    expect(Object.keys(quietMiss).sort()).toEqual(['clueKey', 'result', 'seriesKey', 'state'])
-    expect(quietMiss.result === 'miss' && quietMiss.seriesKey).toBe(wrongSeriesKey)
-    // FR-027d: the abandoned entity stays in the pool and stays answerable, so a wrong
-    // guess costs the mistake and nothing else.
+    // FR-027d: the abandoned entity stays in the pool and stays answerable.
     expect(payload.clues.map((entry) => entry.key)).toContain(clue.key)
-    expect(payload.clues.length).toBeGreaterThanOrEqual(9)
     expect(solution.answers[clue.key]).toBe(rightSeriesKey)
-
-    // FR-027: the third miss discloses this pairing and the full mapping.
-    const endingMiss = resolveMatchOutcome(
-      payload,
-      solution,
-      { clueKey: clue.key, seriesKey: wrongSeriesKey },
-      verifyMatchProgress(solution, [], repeatedMisses(solution, payload, clue.key, wrongSeriesKey, payload.wrongLimit - 1)),
-    )
-    expect(endingMiss.result).toBe('miss')
-    expect(endingMiss.state).toBe('lost')
-    expect(endingMiss.result === 'miss' && endingMiss.correctSeriesKey).toBe(rightSeriesKey)
-    expect(endingMiss.result === 'miss' && Object.keys(endingMiss.answers)).toHaveLength(
-      payload.clues.length,
-    )
+    // The payload no longer carries a mistake cap.
+    expect(Object.keys(payload)).not.toContain('wrongLimit')
 
     // R-020: the attempt names the card being answered, not an entity id.
-    expect(Object.keys(endingMiss.result === 'miss' ? endingMiss : hit)).not.toContain('tileKey')
-
-    // FR-039 / R-020: both keys are required, so a click with no card behind it is invalid.
     expect(() => parseMatchAttempt({ seriesKey: payload.grid.series[0].key })).toThrow()
     expect(() => parseMatchAttempt({ clueKey: clue.key })).toThrow()
     expect(() => parseMatchAttempt({ clueKey: clue.key, seriesKey: 42 })).toThrow()
@@ -183,7 +147,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
         payload,
         solution,
         { clueKey: 'c:1', seriesKey: payload.grid.series[0].key },
-        verifyMatchProgress(solution, [], []),
+        verifyMatchProgress(solution, []),
       ),
     ).toThrow()
     expect(() =>
@@ -191,7 +155,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
         payload,
         solution,
         { clueKey: clue.key, seriesKey: 'a:999999' },
-        verifyMatchProgress(solution, [], []),
+        verifyMatchProgress(solution, []),
       ),
     ).toThrow()
 
@@ -201,7 +165,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
     expect(reread?.solution).toEqual(row.solution)
 
     // SC-007: a rejection is a structured envelope naming the code with the right status,
-    // never a blank body and never a leaked internal message, and it moves no counter.
+    // never a blank body and never a leaked internal message.
     expect(STATUS_FOR_CODE.INVALID_ATTEMPT).toBe(400)
 
     // Principle V / T079: the client renders the code the server sent, and only offers a
@@ -212,7 +176,6 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
     await expect(
       readErrorCode(asResponse('DATABASE_UNAVAILABLE', 503)),
     ).resolves.toBe('DATABASE_UNAVAILABLE')
-    // An unnamed or unparseable body still gets a plain-language fallback.
     await expect(
       readErrorCode({ ok: false, status: 500, json: async () => { throw new Error('html') } } as unknown as Response),
     ).resolves.toBe('DATABASE_UNAVAILABLE')
@@ -228,8 +191,6 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
     expect(envelope).toEqual({
       error: { code: 'INVALID_ATTEMPT', message: expect.any(String) },
     })
-    // Principle V: the client is told the code, not the driver's complaint. A rejected
-    // attempt must not leak a connection string, SQL text, stack, or hostname.
     const serialized = JSON.stringify(envelope)
     for (const forbidden of ['postgres', 'SELECT', 'INSERT', 'at Object.', 'ECONNREFUSED', '.ts:']) {
       expect(serialized).not.toContain(forbidden)
@@ -263,7 +224,6 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
       season: { season: 'fall', year: 2026 },
       grid: { rows: 3, cols: 3, series },
       clues,
-      wrongLimit: 3,
     }
     const solution = { answers }
 
@@ -276,7 +236,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
       payload,
       solution,
       { clueKey: clues[0].key, seriesKey: answers[clues[0].key] },
-      verifyMatchProgress(solution, [], []),
+      verifyMatchProgress(solution, []),
     )
     for (const clue of clues) {
       if (green.size >= series.length) break
@@ -284,7 +244,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
         payload,
         solution,
         { clueKey: clue.key, seriesKey: answers[clue.key] },
-        verifyMatchProgress(solution, greenPairs, []),
+        verifyMatchProgress(solution, greenPairs),
       )
       expect(outcome.result).toBe('hit')
       expect(outcome.seriesKey).toBe(answers[clue.key])
@@ -302,23 +262,11 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
       verifyMatchProgress(
         solution,
         series.map((entry) => ({ clueKey: clues[0].key, seriesKey: entry.key })),
-        [],
       ),
     ).toThrow(/correct pairing/)
     expect(() =>
-      verifyMatchProgress(solution, [{ clueKey: clues[0].key, seriesKey: series[0].key }], []),
+      verifyMatchProgress(solution, [{ clueKey: clues[0].key, seriesKey: series[0].key }]),
     ).not.toThrow()
-    // A miss count cannot be invented to unlock the FR-027 disclosure either.
-    expect(() =>
-      verifyMatchProgress(solution, [], [{ clueKey: clues[0].key, seriesKey: 'a:999999' }]),
-    ).not.toThrow()
-    expect(() =>
-      verifyMatchProgress(
-        solution,
-        [],
-        [{ clueKey: clues[0].key, seriesKey: answers[clues[0].key] }],
-      ),
-    ).toThrow(/actually a correct pairing/)
     // FR-028: the game is won once all nine tiles are green.
     expect(green.size).toBe(9)
     expect(state).toBe('won')

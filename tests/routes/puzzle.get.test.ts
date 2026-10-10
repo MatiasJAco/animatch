@@ -102,7 +102,8 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
     expect(payload.grid.rows).toBe(3)
     expect(payload.grid.cols).toBe(3)
     expect(payload.grid.series).toHaveLength(9)
-    expect(payload.wrongLimit).toBe(3)
+    // FR-001: the match payload no longer carries a mistake cap; the countdown ends the game.
+    expect(Object.keys(payload)).not.toContain('wrongLimit')
 
     // FR-024: nine distinct series titles, so no tile is ambiguous.
     expect(new Set(payload.grid.series.map((s) => s.key)).size).toBe(9)

@@ -598,6 +598,25 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* FR-014: the countdown badge inside the clue card — a right-aligned circle with two digits. */
+.clue-card__timer {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(2.25rem, 4.6vw, 3rem);
+  height: clamp(2.25rem, 4.6vw, 3rem);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 1.4vw, 1.2rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .share-text {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
