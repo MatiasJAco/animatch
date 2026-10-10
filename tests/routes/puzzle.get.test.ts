@@ -10,7 +10,7 @@ import type {
   MatchTheSeriesPayloadData,
   MatchTheSeriesSolution,
 } from '../../server/game/matchTheSeries'
-import type { MoreOrLessPuzzleData } from '../../server/game/moreOrLess'
+import type { MoreOrLessPuzzleData, MoreOrLessSolution } from '../../server/game/moreOrLess'
 
 const connectionString = process.env.DATABASE_URL ?? ''
 
@@ -61,6 +61,12 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
     const countsInPayload = JSON.stringify(payload).match(/"roleCount":/g) ?? []
     expect(countsInPayload.length).toBe(1)
     expect((row.payload as { signature?: string }).signature).toBeTypeOf('string')
+
+    // FR-001 (feature 008): every actor in the stored solution is strictly above the floor.
+    const solution = row.solution as MoreOrLessSolution
+    for (const actor of [payload.initialVisible, ...payload.chain]) {
+      expect(solution.roleCounts[String(actor.id)]).toBeGreaterThan(80)
+    }
 
     // FR-012 / R-009: no solution and no external media reach the client.
     const served = JSON.stringify(payload)

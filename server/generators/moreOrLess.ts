@@ -18,12 +18,28 @@ export interface RoleCountCandidate {
   roleCount: number
 }
 
+// FR-001 (feature 008): only established actors are eligible for More or Less.
+// Strictly greater than 80 — an actor with 81+ roles qualifies, an actor with 80 does not.
+export const MIN_ROLE_COUNT_EXCLUSIVE = 80
+
+export function isQualifiedRoleCount(roleCount: number): boolean {
+  return roleCount > MIN_ROLE_COUNT_EXCLUSIVE
+}
+
+export function filterQualifiedCandidates(
+  candidates: readonly RoleCountCandidate[],
+): RoleCountCandidate[] {
+  return candidates.filter((candidate) => isQualifiedRoleCount(candidate.roleCount))
+}
+
 export class PuzzleUnavailableError extends Error {
   readonly code = 'PUZZLE_UNAVAILABLE' as const
 }
 
 /**
  * FR-022: walks the seeded shuffle collecting people whose adjacent role counts differ.
+ * Feature 008 FR-001/FR-010: the input is first narrowed to actors above the role floor, so no
+ * chain position can ever hold a below-floor actor regardless of the caller.
  * Returns twelve people: the starting visible actor plus the eleven-actor chain, or
  * null when the catalog cannot supply an unambiguous chain.
  */
@@ -31,7 +47,8 @@ export function buildChain(
   candidates: readonly RoleCountCandidate[],
   prng: () => number,
 ): RoleCountCandidate[] | null {
-  const ordered = shuffle(candidates, prng).filter(
+  const qualified = filterQualifiedCandidates(candidates)
+  const ordered = shuffle(qualified, prng).filter(
     (candidate, index, all) =>
       candidate.roleCount > 0 && (index === 0 || candidate.roleCount !== all[index - 1]?.roleCount),
   )
