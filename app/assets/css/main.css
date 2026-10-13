@@ -264,6 +264,8 @@ a {
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  align-content: start;
   gap: var(--gap);
 }
 

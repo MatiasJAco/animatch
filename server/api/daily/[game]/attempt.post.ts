@@ -1,7 +1,8 @@
 import { getRouterParam, readBody } from 'h3'
-import { isGameId } from '../../../game/ids'
+import { isGameId, type GameId } from '../../../game/ids'
 import { getOrCreatePuzzleFor } from '../../../game/puzzleService'
 import { GeneratorError } from '../../../game/puzzleService'
+import { isMatchEditionId } from '../../../game/matchSeasons'
 import { stripSignature } from '../../../db/puzzles'
 import { getUtcDateNow } from '../../../utils/day'
 import { errorResponse } from '../../../utils/http'
@@ -36,7 +37,7 @@ import {
  * FR-039 / FR-041: the attempt is validated against the stored puzzle. The server holds no
  * game state, and the outcome never carries an attempt count; counting lives on the device.
  */
-async function resolveAttempt(game: string, body: unknown) {
+async function resolveAttempt(game: GameId, body: unknown) {
   if (game === 'more_or_less') {
     const row = await getOrCreatePuzzleFor('more_or_less', getUtcDateNow())
     const payload = stripSignature(row.payload) as MoreOrLessPuzzleData
@@ -45,8 +46,8 @@ async function resolveAttempt(game: string, body: unknown) {
     return { outcome: resolveMoreOrLessOutcome(payload, solution, round, answer) }
   }
 
-  if (game === 'match_the_series') {
-    const row = await getOrCreatePuzzleFor('match_the_series', getUtcDateNow())
+  if (isMatchEditionId(game)) {
+    const row = await getOrCreatePuzzleFor(game, getUtcDateNow())
     const payload = stripSignature(row.payload) as MatchTheSeriesPayloadData
     const solution = row.solution as MatchTheSeriesSolution
 

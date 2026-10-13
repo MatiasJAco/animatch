@@ -21,12 +21,12 @@ describe('device state', () => {
     reloaded.load()
     expect(reloaded.getGameState('more_or_less')).toMatchObject({ status: 'won', attempts: 10 })
     expect(reloaded.getGameState('groups')).toMatchObject({ status: 'in_progress', attempts: 3 })
-    expect(reloaded.getGameState('match_the_series')).toBeUndefined()
+    expect(reloaded.getGameState('match_the_series_autumn_2026')).toBeUndefined()
 
     // FR-043a: a Match the Series board resumes with its green tiles, its answered
     // cards, and its remaining time exactly as they were left.
     const board = useLocalProgress()
-    board.setGameState('match_the_series', {
+    board.setGameState('match_the_series_autumn_2026', {
       status: 'in_progress',
       attempts: 4,
       greenSeries: ['a:9001', 'a:9102'],
@@ -36,7 +36,7 @@ describe('device state', () => {
     })
     const resumed = useLocalProgress()
     resumed.load()
-    expect(resumed.getGameState('match_the_series')).toMatchObject({
+    expect(resumed.getGameState('match_the_series_autumn_2026')).toMatchObject({
       attempts: 4,
       greenSeries: ['a:9001', 'a:9102'],
       answeredClues: ['c:1', 'c:2'],
@@ -45,7 +45,7 @@ describe('device state', () => {
     })
 
     // FR-008: a stored timer value outside the limit is clamped on read.
-    resumed.setGameState('match_the_series', {
+    resumed.setGameState('match_the_series_autumn_2026', {
       status: 'in_progress',
       attempts: 4,
       greenSeries: ['a:9001'],
@@ -55,10 +55,10 @@ describe('device state', () => {
     })
     const clamped = useLocalProgress()
     clamped.load()
-    expect(clamped.getGameState('match_the_series')?.timerRemainingMs).toBe(90_000)
+    expect(clamped.getGameState('match_the_series_autumn_2026')?.timerRemainingMs).toBe(90_000)
 
     // FR-007: the time-out reveal persists so it survives a reload.
-    resumed.setGameState('match_the_series', {
+    resumed.setGameState('match_the_series_autumn_2026', {
       status: 'lost',
       attempts: 6,
       greenSeries: ['a:9001'],
@@ -68,7 +68,7 @@ describe('device state', () => {
     })
     const afterTimeout = useLocalProgress()
     afterTimeout.load()
-    expect(afterTimeout.getGameState('match_the_series')).toMatchObject({
+    expect(afterTimeout.getGameState('match_the_series_autumn_2026')).toMatchObject({
       status: 'lost',
       revealedAnswers: { 'c:1': 'a:9001', 'c:2': 'a:9102' },
     })
@@ -78,7 +78,7 @@ describe('device state', () => {
     // and the abandoned entity remains answerable. Only a hit retires a card.
     const afterMiss = useLocalProgress()
     afterMiss.load()
-    afterMiss.setGameState('match_the_series', {
+    afterMiss.setGameState('match_the_series_autumn_2026', {
       status: 'in_progress',
       attempts: 5,
       greenSeries: ['a:9001', 'a:9102'],
@@ -88,7 +88,7 @@ describe('device state', () => {
     })
     const rotated = useLocalProgress()
     rotated.load()
-    const rotatedState = rotated.getGameState('match_the_series')
+    const rotatedState = rotated.getGameState('match_the_series_autumn_2026')
     expect(rotatedState?.clueIndex).toBe(4)
     expect(rotatedState?.timerRemainingMs).toBe(30_000)
     // The abandoned clue key is not recorded, so the pool still holds it.
@@ -125,6 +125,25 @@ describe('device state', () => {
     broken.load()
     expect(broken.current.value?.games).toEqual({})
 
+    // FR-015: a saved entry under the removed season-less game key is dropped without
+    // error, so the editions start fresh and reset-all clears the stale key.
+    localStorage.setItem(
+      KEYS.progress,
+      JSON.stringify({
+        v: 1,
+        date: getUtcDateNow(),
+        games: {
+          match_the_series: { status: 'won', attempts: 9 },
+          match_the_series_autumn_2026: { status: 'in_progress', attempts: 2 },
+        },
+      }),
+    )
+    const stale = useLocalProgress()
+    stale.load()
+    expect(stale.getGameState('match_the_series' as never)).toBeUndefined()
+    expect(stale.current.value?.games).not.toHaveProperty('match_the_series')
+    expect(stale.getGameState('match_the_series_autumn_2026')?.attempts).toBe(2)
+
     const counter = useAttemptCount('groups')
     counter.increment()
     counter.increment()
@@ -148,7 +167,7 @@ describe('device state', () => {
       resettable.load()
       resettable.setGameState('more_or_less', { status: 'won', attempts: 10 })
       resettable.setGameState('groups', { status: 'in_progress', attempts: 2, mistakes: 1 })
-      resettable.setGameState('match_the_series', {
+      resettable.setGameState('match_the_series_autumn_2026', {
         status: 'in_progress',
         attempts: 4,
         greenSeries: ['a:9001'],
@@ -156,7 +175,7 @@ describe('device state', () => {
         clueIndex: 1,
       })
 
-      resettable.resetGame('match_the_series')
+      resettable.resetGame('match_the_series_autumn_2026')
       expect(requests).toEqual([])
 
       // FR-057: the reset reaches the game the control was given. An unresolved
@@ -168,7 +187,7 @@ describe('device state', () => {
 
       const afterReset = useLocalProgress()
       afterReset.load()
-      expect(afterReset.getGameState('match_the_series')).toBeUndefined()
+      expect(afterReset.getGameState('match_the_series_autumn_2026')).toBeUndefined()
       expect(afterReset.getGameState('more_or_less')?.status).toBe('won')
       expect(afterReset.getGameState('groups')?.attempts).toBe(2)
       expect(afterReset.current.value?.date).toBe(getUtcDateNow())
@@ -187,7 +206,7 @@ describe('device state', () => {
       // FR-057b: the home reset clears all three games, and FR-057c: it is one write of
       // the progress blob rather than three operations, so the store cannot end up
       // partially cleared. The date entry survives so the day is still today's.
-      useLocalProgress().setGameState('match_the_series', {
+      useLocalProgress().setGameState('match_the_series_autumn_2026', {
         status: 'in_progress',
         attempts: 4,
         greenSeries: ['a:9001'],
@@ -216,7 +235,7 @@ describe('device state', () => {
       expect(afterHomeReset.current.value?.games).toEqual({})
       expect(afterHomeReset.getGameState('more_or_less')).toBeUndefined()
       expect(afterHomeReset.getGameState('groups')).toBeUndefined()
-      expect(afterHomeReset.getGameState('match_the_series')).toBeUndefined()
+      expect(afterHomeReset.getGameState('match_the_series_autumn_2026')).toBeUndefined()
       expect(afterHomeReset.current.value?.date).toBe(getUtcDateNow())
       // FR-057b: the language choice lives in animatch:v1:prefs and survives untouched.
       expect(getStoredLocale()).toBe('es')

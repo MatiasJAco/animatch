@@ -54,7 +54,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // A malformed loss record is dropped while the game keeps its lost status, so a corrupt
 // entry degrades to the plain result instead of an error or a blank screen (FR-011).
 function sanitize(progress: LocalProgress): LocalProgress {
-  for (const id of Object.keys(progress.games) as GameId[]) {
+  for (const id of Object.keys(progress.games)) {
+    // A key stored by a removed game identity (for example the old season-less
+    // `match_the_series`) is not one of today's games: drop it without error so the visitor
+    // simply starts fresh, and reset-all also clears it (spec FR-015).
+    if (!isGameId(id)) {
+      delete (progress.games as Record<string, LocalGameState | undefined>)[id]
+      continue
+    }
     const state = progress.games[id]
     if (state && !isLossRecord(state.loss)) {
       delete state.loss

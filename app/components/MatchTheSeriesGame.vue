@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import type { GameId } from '~~/server/game/ids'
 import type {
   MatchTheSeriesOutcome,
   MatchTheSeriesPayloadData,
 } from '~~/server/game/matchTheSeries'
+import type { MessageKey } from '~/i18n'
 import { useLocale } from '~/composables/useLocale'
 import {
   isRetryableCode,
@@ -14,14 +16,16 @@ import { useLocalProgress } from '~/composables/useLocalProgress'
 import { useMatchTimer } from '~/composables/useMatchTimer'
 import { applyMatchAnswer, nextUnansweredIndex } from '~/utils/matchState'
 
+const props = defineProps<{ game: GameId }>()
+
 const { t } = useLocale()
 const progress = useLocalProgress()
 
 const { data: puzzle, pending, error, refresh } = await useFetch<MatchTheSeriesPayloadData>(
-  '/api/daily/match_the_series',
+  `/api/daily/${props.game}`,
 )
 
-const gameState = computed(() => progress.getGameState('match_the_series'))
+const gameState = computed(() => progress.getGameState(props.game))
 const finished = computed(
   () => gameState.value?.status === 'won' || gameState.value?.status === 'lost',
 )
@@ -55,7 +59,7 @@ const currentClue = computed(() => puzzle.value?.clues[clueIndex.value] ?? null)
 // Writes the current board wholesale (setGameState replaces the entry), so the timer and reveal
 // fields must be carried explicitly or a write would silently drop them.
 function writeBoard(overrides: Partial<NonNullable<typeof gameState.value>> = {}) {
-  progress.setGameState('match_the_series', {
+  progress.setGameState(props.game, {
     status: gameState.value?.status ?? 'in_progress',
     attempts: attempts.value,
     greenSeries: greenSeries.value,
@@ -80,7 +84,7 @@ const expire = async () => {
   expiring.value = true
   expireError.value = null
   try {
-    const res = await fetch('/api/daily/match_the_series/expire', { method: 'POST' })
+    const res = await fetch(`/api/daily/${props.game}/expire`, { method: 'POST' })
     if (!res.ok) {
       expireError.value = await readErrorCode(res)
       return
@@ -127,7 +131,7 @@ const answer = async (seriesKey: string) => {
   busy.value = true
   attemptError.value = null
   try {
-    const res = await fetch('/api/daily/match_the_series/attempt', {
+    const res = await fetch(`/api/daily/${props.game}/attempt`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -166,7 +170,7 @@ const answer = async (seriesKey: string) => {
       outcome,
       { clueKey: clue.key, seriesKey },
     )
-    progress.setGameState('match_the_series', next)
+    progress.setGameState(props.game, next)
   } catch {
     lastSeriesKey.value = seriesKey
     attemptError.value = 'DATABASE_UNAVAILABLE'
@@ -218,9 +222,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <GameShell :title="t('game.match_the_series')">
+  <GameShell :title="t(`game.${props.game}` as MessageKey)">
     <template #header-actions>
-      <GameHeaderControls game="match_the_series" />
+      <GameHeaderControls :game="props.game" />
     </template>
 
     <ErrorPanel
@@ -246,6 +250,7 @@ onMounted(() => {
       />
 
       <MatchGrid
+        :game="props.game"
         :puzzle="puzzle"
         :green-series="greenSeries"
         :answered-clues="answeredClues"
@@ -262,7 +267,7 @@ onMounted(() => {
 
       <ResultPanel
         v-if="resultState"
-        game="match_the_series"
+        :game="props.game"
         :state="resultState"
         :attempts="attempts"
       />

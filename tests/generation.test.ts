@@ -3,7 +3,7 @@ import { Pool } from 'pg'
 import { isolatedPuzzleDate } from './helpers/dbDates'
 import { isTransactionControl, isWrite, recordSql } from './helpers/sqlRecorder'
 import { generateMatchTheSeries } from '../server/generators/matchTheSeries'
-import { getCalendarSeason } from '../server/utils/day'
+import { matchSeasonFor } from '../server/game/matchSeasons'
 import {
   computePuzzleSignature,
   getDailyPuzzle,
@@ -85,18 +85,28 @@ describe('puzzle store', () => {
     // once. It must never create a record of who visited.
     // A clean slate, so the recorded run really does generate rather than read a stored row.
     await pool.query('DELETE FROM daily_puzzles WHERE game = $1 AND puzzle_date = $2', [
-      'match_the_series',
+      'match_the_series_autumn_2026',
       puzzleDate,
     ])
 
     const recorder = recordSql()
+    let stored: { payload: unknown } | undefined
     try {
-      await getOrCreateDailyPuzzle('match_the_series', puzzleDate, () =>
-        generateMatchTheSeries('match_the_series', puzzleDate, getCalendarSeason()),
+      stored = await getOrCreateDailyPuzzle('match_the_series_autumn_2026', puzzleDate, () =>
+        generateMatchTheSeries(
+          'match_the_series_autumn_2026',
+          puzzleDate,
+          matchSeasonFor('match_the_series_autumn_2026'),
+        ),
       )
     } finally {
       recorder.restore()
     }
+
+    // The Autumn edition always draws from the fixed 2026 fall season, never the UTC date.
+    expect(
+      (stored?.payload as { data?: { season?: unknown } } | undefined)?.data?.season,
+    ).toEqual({ season: 'fall', year: 2026 })
 
     const statements = recorder.statements()
     const writes = statements.filter(isWrite)

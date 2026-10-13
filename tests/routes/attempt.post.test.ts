@@ -23,6 +23,7 @@ import {
   type MatchTheSeriesSolution,
 } from '../../server/game/matchTheSeries'
 import { getCalendarSeason } from '../../server/utils/day'
+import { matchSeasonFor } from '../../server/game/matchSeasons'
 import { createErrorEnvelope, STATUS_FOR_CODE } from '../../server/utils/errors'
 import {
   isRetryableCode,
@@ -45,7 +46,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
       date,
     ])
     await pool.query('DELETE FROM daily_puzzles WHERE game = $1 AND puzzle_date = $2', [
-      'match_the_series',
+      'match_the_series_autumn_2026',
       matchDate,
     ])
     await pool.query('DELETE FROM daily_puzzles WHERE game = $1 AND puzzle_date = $2', [
@@ -86,11 +87,11 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
   })
 
   it('never ends a match the Series game on a miss and discloses nothing about the answer', async () => {
-    const row = await getOrCreateDailyPuzzle('match_the_series', matchDate, () =>
+    const row = await getOrCreateDailyPuzzle('match_the_series_autumn_2026', matchDate, () =>
       generateMatchTheSeries(
-        'match_the_series',
+        'match_the_series_autumn_2026',
         matchDate,
-        getCalendarSeason(new Date(`${matchDate}T00:00:00.000Z`)),
+        matchSeasonFor('match_the_series_autumn_2026'),
       ),
     )
     const payload = stripSignature(row.payload) as MatchTheSeriesPayloadData
@@ -160,7 +161,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
     ).toThrow()
 
     // FR-041: a rejected attempt changes no state, so the stored puzzle is untouched.
-    const reread = await getDailyPuzzle('match_the_series', matchDate)
+    const reread = await getDailyPuzzle('match_the_series_autumn_2026', matchDate)
     expect(reread?.payload).toEqual(row.payload)
     expect(reread?.solution).toEqual(row.solution)
 
@@ -199,7 +200,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
     expect(Object.keys(envelope.error).sort()).toEqual(['code', 'message'])
 
     // FR-041: a rejected attempt changed no state, so the stored puzzle is still identical.
-    const stillUnchanged = await getDailyPuzzle('match_the_series', matchDate)
+    const stillUnchanged = await getDailyPuzzle('match_the_series_autumn_2026', matchDate)
     expect(stillUnchanged?.payload).toEqual(row.payload)
     expect(stillUnchanged?.solution).toEqual(row.solution)
   })
@@ -219,7 +220,7 @@ describe.skipIf(!connectionString)('POST /api/daily/:game/attempt', () => {
       clues.map((clue, index) => [clue.key, series[Math.floor(index / 2)].key]),
     )
     const payload: MatchTheSeriesPayloadData = {
-      game: 'match_the_series',
+      game: 'match_the_series_autumn_2026',
       date: '2026-10-06',
       season: { season: 'fall', year: 2026 },
       grid: { rows: 3, cols: 3, series },

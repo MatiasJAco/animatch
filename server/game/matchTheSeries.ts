@@ -1,3 +1,5 @@
+import type { MatchEditionId } from './matchSeasons'
+
 export const MATCH_BOARD_SIZE = 9
 // R-019: two cards per grid series, so every tile keeps a second correct route
 // and the Next control never dead-ends.
@@ -23,7 +25,7 @@ export interface MatchTheSeriesGrid {
 }
 
 export interface MatchTheSeriesPayloadData {
-  game: 'match_the_series'
+  game: MatchEditionId
   date: string
   season: { season: string; year: number }
   grid: MatchTheSeriesGrid

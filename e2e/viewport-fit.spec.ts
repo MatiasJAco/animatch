@@ -23,7 +23,7 @@ const VIEWPORTS: Viewport[] = [
 
 const ROUTES = {
   home: '/',
-  match: '/game/match-the-series',
+  match: '/game/match-the-series-autumn-2026',
   groups: '/game/groups',
   more: '/game/more-or-less',
 } as const
@@ -31,7 +31,7 @@ const ROUTES = {
 type GameKey = 'match' | 'groups' | 'more'
 
 const ATTEMPT_URL: Record<GameKey, string> = {
-  match: '**/api/daily/match_the_series/attempt',
+  match: '**/api/daily/match_the_series_autumn_2026/attempt',
   groups: '**/api/daily/groups/attempt',
   more: '**/api/daily/more_or_less/attempt',
 }
@@ -280,12 +280,12 @@ async function forceAttemptError(page: Page, game: GameKey): Promise<void> {
 }
 
 async function routeMatchTimeout(page: Page): Promise<void> {
-  const payload = await (await page.request.get('/api/daily/match_the_series')).json()
+  const payload = await (await page.request.get('/api/daily/match_the_series_autumn_2026')).json()
   const answers: Record<string, string> = {}
   for (const clue of payload.clues as Array<{ key: string }>) {
     answers[clue.key] = payload.grid.series[0].key
   }
-  await page.route('**/api/daily/match_the_series/expire', (route) =>
+  await page.route('**/api/daily/match_the_series_autumn_2026/expire', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -305,7 +305,7 @@ async function seedMatchTimer(page: Page, remainingMs: number): Promise<void> {
         v: 1,
         date: day,
         games: {
-          match_the_series: {
+          match_the_series_autumn_2026: {
             status: 'in_progress',
             attempts: 0,
             greenSeries: [],

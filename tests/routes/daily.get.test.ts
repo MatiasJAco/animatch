@@ -42,15 +42,17 @@ describe('GET /api/daily listing', () => {
     ;(getPool() as unknown as { query?: unknown }).query = realQuery
   })
 
-  it('returns three games for the current UTC date and never reports completion', async () => {
+  it('returns five games for the current UTC date, current season first, and never reports completion', async () => {
     const listing = await listDaily()
 
     expect(listing.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    expect(listing.games).toHaveLength(3)
-    expect(listing.games.map((entry) => entry.game).sort()).toEqual([
-      'groups',
-      'match_the_series',
+    expect(listing.games).toHaveLength(5)
+    expect(listing.games.map((entry) => entry.game)).toEqual([
       'more_or_less',
+      'match_the_series_autumn_2026',
+      'match_the_series_spring_2026',
+      'match_the_series_summer_2026',
+      'groups',
     ])
 
     for (const entry of listing.games) {
@@ -80,7 +82,7 @@ describe('GET /api/daily listing', () => {
     const listing = await listDaily()
 
     // FR-050 / FR-051 / SC-008: never a blank success and never an unlabelled failure.
-    expect(listing.games).toHaveLength(3)
+    expect(listing.games).toHaveLength(5)
     for (const entry of listing.games) {
       expect(entry.status).toBe('error')
       expect(entry.code).toBe('DATABASE_UNAVAILABLE')

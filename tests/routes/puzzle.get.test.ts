@@ -3,6 +3,7 @@ import { getDailyPuzzle, getOrCreateDailyPuzzle, stripSignature } from '../../se
 import { generateMoreOrLess } from '../../server/generators/moreOrLess'
 import { generateGroups } from '../../server/generators/groups'
 import { generateMatchTheSeries, PuzzleUnavailableError } from '../../server/generators/matchTheSeries'
+import { matchSeasonFor } from '../../server/game/matchSeasons'
 import type { GroupsPayloadData } from '../../server/game/groups'
 import { getCalendarSeason } from '../../server/utils/day'
 import { isolatedPuzzleDate } from '../helpers/dbDates'
@@ -37,7 +38,7 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
   beforeEach(async () => {
     if (!connectionString) return
     await deleteRows('more_or_less', moreOrLessDate)
-    await deleteRows('match_the_series', matchDate)
+    await deleteRows('match_the_series_autumn_2026', matchDate)
     await deleteRows('groups', groupsDate)
   })
 
@@ -79,24 +80,24 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
     let payload: MatchTheSeriesPayloadData
     let solution: MatchTheSeriesSolution
     try {
-      const row = await getOrCreateDailyPuzzle('match_the_series', matchDate, () =>
+      const row = await getOrCreateDailyPuzzle('match_the_series_autumn_2026', matchDate, () =>
         generateMatchTheSeries(
-          'match_the_series',
+          'match_the_series_autumn_2026',
           matchDate,
-          getCalendarSeason(new Date(`${matchDate}T00:00:00.000Z`)),
+          matchSeasonFor('match_the_series_autumn_2026'),
         ),
       )
       payload = stripSignature(row.payload) as MatchTheSeriesPayloadData
       solution = row.solution as MatchTheSeriesSolution
     } catch (error) {
-      // The current season may legitimately have no coverage; the shared catalog decides.
+      // The fixed season may legitimately have no coverage; the shared catalog decides.
       expect((error as { code?: string }).code).toBe('PUZZLE_UNAVAILABLE')
       return
     }
 
-    expect(payload.game).toBe('match_the_series')
+    expect(payload.game).toBe('match_the_series_autumn_2026')
     expect(payload.date).toBe(matchDate)
-    expect(payload.season.year).toBeGreaterThan(1950)
+    expect(payload.season).toEqual({ season: 'fall', year: 2026 })
 
     // FR-024: exactly one grid of three by three.
     expect(payload.grid.rows).toBe(3)
@@ -178,19 +179,19 @@ describe.skipIf(!connectionString)('GET /api/daily/:game', () => {
 
   it('reports PUZZLE_UNAVAILABLE and stores nothing for a season with no coverage', async () => {
     const emptySeasonDate = '2099-01-01'
-    await deleteRows('match_the_series', emptySeasonDate)
+    await deleteRows('match_the_series_autumn_2026', emptySeasonDate)
 
     await expect(
-      getOrCreateDailyPuzzle('match_the_series', emptySeasonDate, () =>
+      getOrCreateDailyPuzzle('match_the_series_autumn_2026', emptySeasonDate, () =>
         generateMatchTheSeries(
-          'match_the_series',
+          'match_the_series_autumn_2026',
           emptySeasonDate,
-          getCalendarSeason(new Date(`${emptySeasonDate}T00:00:00.000Z`)),
+          { season: 'winter', year: 2099 },
         ),
       ),
     ).rejects.toThrow(PuzzleUnavailableError)
 
-    const row = await getDailyPuzzle('match_the_series', emptySeasonDate)
+    const row = await getDailyPuzzle('match_the_series_autumn_2026', emptySeasonDate)
     expect(row).toBeNull()
   })
 })

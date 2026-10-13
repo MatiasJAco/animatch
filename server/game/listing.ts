@@ -1,12 +1,13 @@
 import type { GameId } from './ids'
 import { GAME_IDS } from './ids'
-import { getUtcDateNow, getCalendarSeason, type PuzzleDate } from '../utils/day'
+import { getUtcDateNow, type PuzzleDate } from '../utils/day'
 import { logDatabaseFailure } from '../db/pool'
 import {
   countMatchableCurrentSeasonSeries,
   countPeopleWithAtLeastOneRole,
   countVoicedCharacters,
 } from '../catalog/queries'
+import { isMatchEditionId, matchSeasonFor } from './matchSeasons'
 
 export type GameStatus = 'ready' | 'unavailable' | 'error'
 
@@ -27,15 +28,18 @@ const REQUIRED_SERIES = 16
 const REQUIRED_TILES = 16
 
 async function probeCoverage(game: GameId): Promise<boolean> {
-  const { season, year } = getCalendarSeason()
-  switch (game) {
-    case 'more_or_less':
-      return (await countPeopleWithAtLeastOneRole()) >= REQUIRED_PEOPLE
-    case 'match_the_series':
-      return (await countMatchableCurrentSeasonSeries(year, season)) >= REQUIRED_SERIES
-    case 'groups':
-      return (await countVoicedCharacters()) >= REQUIRED_TILES
+  if (game === 'more_or_less') {
+    return (await countPeopleWithAtLeastOneRole()) >= REQUIRED_PEOPLE
   }
+  if (game === 'groups') {
+    return (await countVoicedCharacters()) >= REQUIRED_TILES
+  }
+  // Each Match the Series edition is probed against its own fixed season, never the UTC date.
+  if (isMatchEditionId(game)) {
+    const { season, year } = matchSeasonFor(game)
+    return (await countMatchableCurrentSeasonSeries(year, season)) >= REQUIRED_SERIES
+  }
+  return false
 }
 
 // Availability is per game, so a coverage gap in one game never blanks the home page.

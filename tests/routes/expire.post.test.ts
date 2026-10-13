@@ -7,7 +7,7 @@ import {
   type MatchTheSeriesPayloadData,
   type MatchTheSeriesSolution,
 } from '../../server/game/matchTheSeries'
-import { getCalendarSeason } from '../../server/utils/day'
+import { matchSeasonFor } from '../../server/game/matchSeasons'
 
 const connectionString = process.env.DATABASE_URL ?? ''
 
@@ -30,11 +30,11 @@ describe.skipIf(!connectionString)('expire endpoint data contract', () => {
   const matchDate = isolatedPuzzleDate(6)
 
   it('reveals every stored clue key mapped to one of the grid series', async () => {
-    const row = await getOrCreateDailyPuzzle('match_the_series', matchDate, () =>
+    const row = await getOrCreateDailyPuzzle('match_the_series_autumn_2026', matchDate, () =>
       generateMatchTheSeries(
-        'match_the_series',
+        'match_the_series_autumn_2026',
         matchDate,
-        getCalendarSeason(new Date(`${matchDate}T00:00:00.000Z`)),
+        matchSeasonFor('match_the_series_autumn_2026'),
       ),
     )
     const payload = stripSignature(row.payload) as MatchTheSeriesPayloadData

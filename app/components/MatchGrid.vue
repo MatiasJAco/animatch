@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { GameId } from '~~/server/game/ids'
 import type {
   MatchTheSeriesClue,
   MatchTheSeriesPayloadData,
 } from '~~/server/game/matchTheSeries'
+import type { MessageKey } from '~/i18n'
 import { useLocale } from '~/composables/useLocale'
 import { entityImageId } from '~/utils/entityImage'
 
 const props = defineProps<{
+  game: GameId
   puzzle: MatchTheSeriesPayloadData
   greenSeries: string[]
   answeredClues: string[]
@@ -173,6 +176,6 @@ const revealedPairings = computed(() =>
     <p class="badge">
       {{ t('result.attempts', { count: attempts }) }}
     </p>
-    <p class="muted">{{ t('game.match_the_series.help') }}</p>
+    <p class="muted">{{ t(`game.${props.game}.help` as MessageKey) }}</p>
   </footer>
 </template>

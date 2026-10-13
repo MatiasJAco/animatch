@@ -2,6 +2,7 @@ import { fetchCharactersAndVoicesForSeason } from '../catalog/queries'
 import { getPool } from '../db/pool'
 import { computePuzzleSignature, type PayloadWithSignature } from '../db/puzzles'
 import type { GameId } from '../game/ids'
+import type { MatchEditionId } from '../game/matchSeasons'
 import type { PuzzleDate } from '../utils/day'
 import { utcDateFrom } from '../utils/day'
 import { sha256Hex } from '../utils/seed'
@@ -185,7 +186,7 @@ export function buildMatchDeck(
 }
 
 export async function generateMatchTheSeries(
-  game: 'match_the_series',
+  game: MatchEditionId,
   puzzleDate: PuzzleDate,
   seasonInfo: { season: string; year: number },
 ): Promise<{ payload: PayloadWithSignature; solution: MatchTheSeriesSolution }> {
