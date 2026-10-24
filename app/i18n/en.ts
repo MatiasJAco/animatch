@@ -26,7 +26,6 @@ export const en = {
   'game.groups.help': 'Find groups of four that share a common criterion.',
   'home.pick_game': 'Pick a game',
   'home.finished_today': 'Finished today',
-  'home.play': 'Play',
   'home.next_rollover': 'Resets at 00:00 UTC',
   'common.retry': 'Retry',
   'common.loading': 'Loading…',

@@ -26,7 +26,6 @@ export const es = {
   'game.groups.help': 'Encuentra grupos de cuatro con un criterio en común.',
   'home.pick_game': 'Elige un juego',
   'home.finished_today': 'Terminado hoy',
-  'home.play': 'Jugar',
   'home.next_rollover': 'Cambia a las 00:00 UTC',
   'common.retry': 'Reintentar',
   'common.loading': 'Cargando…',

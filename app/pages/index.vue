@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import type { GameId } from '~~/server/game/ids'
-import type { DailyListing } from '~~/server/game/listing'
+import { GAME_IDS } from '~~/server/game/ids'
+import type { DailyGameEntry, DailyListing } from '~~/server/game/listing'
 import { useLocale } from '~/composables/useLocale'
 import { useLocalProgress } from '~/composables/useLocalProgress'
 
@@ -10,15 +11,19 @@ const progress = useLocalProgress()
 
 const { data: listing, error, pending, refresh } = await useFetch<DailyListing>('/api/daily')
 
-// SC-009: a catalog failure is a visible, retryable state, never a blank or stuck page.
-// A single unavailable game keeps its own card, so only a total failure replaces the list.
-const failed = computed(() => {
-  if (error.value) {
-    return true
-  }
-  const games = listing.value?.games ?? []
-  return games.length > 0 && games.every((entry) => entry.status === 'error')
+// The catalog is always complete: the server order and the client order both follow GAME_IDS.
+// A missing entry becomes an error card instead of silently disappearing.
+const orderedGames = computed<DailyGameEntry[]>(() => {
+  const byGame = new Map((listing.value?.games ?? []).map((entry) => [entry.game, entry]))
+  return GAME_IDS.map((game) => {
+    const entry = byGame.get(game)
+    return entry ?? { game, status: 'error' as const, code: 'DATABASE_UNAVAILABLE' }
+  })
 })
+
+// A listing fetch failure is a visible, retryable page state. Per-game unavailable/error
+// statuses stay inside the catalog, even when every game is affected.
+const failed = computed(() => Boolean(error.value))
 
 // Finished markers come from this device only.
 onMounted(() => {
@@ -49,8 +54,8 @@ const stateFor = (game: GameId) => progress.getGameState(game)
     <template v-else-if="listing">
       <h2>{{ t('home.pick_game') }}</h2>
       <HomeResetControls />
-      <ul class="game-list">
-        <li v-for="entry in listing.games" :key="entry.game">
+      <ul class="game-list" data-home-catalog>
+        <li v-for="entry in orderedGames" :key="entry.game">
           <GameCard
             :game="entry.game"
             :status="entry.status"

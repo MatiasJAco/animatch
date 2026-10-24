@@ -13,6 +13,13 @@
   --accent-text: #ffffff;
   --correct: #1c7a4a;
   --wrong: #b3261e;
+  --surface-hover: #eef1ff;
+  --surface-finished: #e4e4e9;
+  --surface-inactive: #ececf1;
+  --border-hover: #2f4fd8;
+  --border-inactive: #d6d6de;
+  --game-card-block-size: 24rem;
+  --game-art-aspect: 16 / 9;
   --radius: 10px;
   /* Fluid spacing: tightens toward 1024px and relaxes toward 1920px (research R-002.1). */
   --gap: clamp(0.5rem, 0.35rem + 0.4vw, 0.75rem);
@@ -31,6 +38,11 @@
     --accent-text: #10101a;
     --correct: #63d19b;
     --wrong: #ff8a80;
+    --surface-hover: #262a3a;
+    --surface-finished: #26262b;
+    --surface-inactive: #23232b;
+    --border-hover: #8ba4ff;
+    --border-inactive: #3a3a46;
   }
 }
 
@@ -107,8 +119,7 @@ a {
   }
 }
 
-.page,
-.home {
+.page {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -116,6 +127,20 @@ a {
   flex-direction: column;
   width: 100%;
   max-width: 46rem;
+  margin: 0 auto;
+  padding: clamp(0.5rem, 0.35rem + 0.6vw, 1rem);
+}
+
+/* The catalog is one document-level scroll surface: it may grow taller than the viewport,
+   but never sideways. Game screens keep the locked `.page` frame above. */
+.home {
+  flex: 1 0 auto;
+  min-height: 100dvh;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 56rem;
   margin: 0 auto;
   padding: clamp(0.5rem, 0.35rem + 0.6vw, 1rem);
 }
@@ -264,14 +289,169 @@ a {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   align-content: start;
   gap: var(--gap);
 }
 
+.game-list > li {
+  display: flex;
+  min-width: 0;
+}
+
+/* One uniform card frame: every card has the same width and block size at a given viewport,
+   with the same art band, text rhythm, and bottom-aligned state. */
+.game-card {
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  block-size: var(--game-card-block-size);
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+  text-align: start;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.game-card--playable {
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .game-card--playable:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-hover);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+  }
+}
+
+.game-card--playable:focus-visible {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 6px var(--accent);
+}
+
+.game-card--playable:active {
+  background: var(--surface-inactive);
+}
+
+.game-art {
+  display: block;
+  flex: 0 0 auto;
+  inline-size: 100%;
+  aspect-ratio: var(--game-art-aspect);
+  max-block-size: 45%;
+  min-block-size: 0;
+  background: var(--surface-alt);
+}
+
+.game-art__img,
+.game-art__fallback {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.game-art__img {
+  object-fit: contain;
+}
+
+.game-art__fallback {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--surface-alt) 0 8px,
+      var(--border) 8px 16px
+    );
+}
+
+.game-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-block-size: 0;
+  padding: clamp(0.5rem, 0.35rem + 0.5vw, 0.75rem);
+}
+
+.game-card__name {
+  margin: 0;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.game-card__summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.game-card__state {
+  margin: auto 0 0;
+  align-self: flex-start;
+  font-size: 0.85rem;
+}
+
+.game-card--finished {
+  color: var(--text-muted);
+  background: var(--surface-finished);
+  border-color: var(--border-inactive);
+}
+
+.game-card--finished .game-art {
+  filter: grayscale(1) opacity(0.65);
+}
+
+.game-card--finished .game-card__summary {
+  color: var(--text-muted);
+}
+
+.game-card--unavailable,
+.game-card--error {
+  background: var(--surface-inactive);
+  border-color: var(--border-inactive);
+}
+
+.game-card--unavailable .game-art,
+.game-card--error .game-art {
+  filter: grayscale(0.8) opacity(0.7);
+}
+
+.game-card--unavailable .game-card__summary,
+.game-card--error .game-card__summary {
+  color: var(--text-muted);
+}
+
+@media (min-width: 40rem) {
+  .game-list {
+    --game-card-block-size: 25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 60rem) {
+  .game-list {
+    --game-card-block-size: 24rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .lang-switch {
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 0.4rem;
+}
+
+.lang-switch .button {
+  min-width: 0;
 }
 
 .button.button--ghost {

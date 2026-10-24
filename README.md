@@ -70,6 +70,7 @@ verification tooling and is never shipped.
 | Path | Holds |
 |------|-------|
 | `app/` | Everything the browser renders: pages, components, composables, styles, messages |
+| `public/games/` | Original SVG artwork shown on each home game card |
 | `server/` | Everything that touches the database: API routes, generators, catalog queries |
 | `migrations/` | This app's own schema changes, one file per change |
 | `scripts/` | Operational scripts such as the migration runner |
@@ -77,6 +78,13 @@ verification tooling and is never shipped.
 | `e2e/` | The Playwright viewport-fit gate |
 | `specs/001-daily-anime-puzzles/` | Specification, plan, research, data model, contract, tasks |
 | `docs/` | Reference documentation for the existing catalog |
+
+## Home game artwork
+
+Each home card uses one original SVG from `public/games/`. The file names match the game route
+slugs, and `app/utils/gameArt.ts` maps each game to its path. To replace an image, overwrite the
+matching SVG; no component or CSS change is needed. If you rename the file, update the one-line
+mapping. A missing or broken image falls back to the neutral card placeholder.
 
 ## Ground rules
 

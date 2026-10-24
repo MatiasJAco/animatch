@@ -2,6 +2,8 @@
 export default defineNuxtConfig({
   srcDir: 'app/',
   serverDir: 'server',
+  // Keep static assets at the repository root while app source lives in app/.
+  dir: { public: '../public' },
   ssr: true,
   devtools: { enabled: false },
   experimental: { appManifest: false },

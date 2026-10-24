@@ -360,7 +360,7 @@ test.describe('board-first layout', () => {
   test('home fits the viewport at 1920x1080', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 })
     await page.goto(ROUTES.home)
-    await page.waitForSelector('.game-list .card')
+    await page.waitForSelector('.game-list [data-game-card]')
     await noDocumentScroll(page)
     await withinNoHorizontalOverflow(page)
   })
@@ -372,7 +372,7 @@ test.describe('board-first layout', () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
       await page.goto(ROUTES.home)
-      await page.waitForSelector('.game-list .card')
+      await page.waitForSelector('.game-list [data-game-card]')
       await noHorizontalScroll(page)
 
       for (const game of ['match', 'groups', 'more'] as GameKey[]) {
@@ -430,7 +430,7 @@ test.describe('board-first layout', () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
       await page.goto(ROUTES.home)
-      await page.waitForSelector('.game-list .card')
+      await page.waitForSelector('.game-list [data-game-card]')
       await clearProgress(page)
 
       // Match time-out in session: the reveal list stays inside the board region, above the meta.
@@ -491,7 +491,7 @@ test.describe('board-first layout', () => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height })
 
         await page.goto(ROUTES.home)
-        await page.waitForSelector('.game-list .card')
+        await page.waitForSelector('.game-list [data-game-card]')
         await noHorizontalScroll(page)
 
         for (const game of ['match', 'groups', 'more'] as GameKey[]) {
