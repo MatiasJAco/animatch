@@ -143,6 +143,9 @@ a {
   max-width: 56rem;
   margin: 0 auto;
   padding: clamp(0.5rem, 0.35rem + 0.6vw, 1rem);
+  /* Feature 012: the content area is the reference frame for the header's centering and for the
+     control's stacking threshold, so the threshold is measured against it, not the viewport. */
+  container-type: inline-size;
 }
 
 .page-header {
@@ -275,13 +278,74 @@ a {
   color: var(--text-muted);
 }
 
+/* Feature 012: the header is a three-track grid with two equal outer tracks, so the middle
+   track's center is the content area's center at every width. Both children are placed
+   explicitly: with only the title placed, auto-placement would drop the control into the free
+   left outer track instead of flush right. */
 .home__header {
   flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
   gap: var(--gap);
+}
+
+.home__header__title {
+  grid-column: 2;
+  justify-self: center;
+  min-width: 0;
+  text-align: center;
+}
+
+/* The heading hugs its own text, so the box and the text share one center line. A centered box
+   holding left-aligned text would not. */
+.home__header__title > h1 {
+  width: fit-content;
+  margin-inline: auto;
+}
+
+/* The tagline hugs its own text the same way, so it rides on the title's center line even when
+   it wraps onto two lines. */
+.home__header__title > p {
+  width: fit-content;
+  margin-inline: auto;
+}
+
+.home__header__control {
+  grid-column: 3;
+  justify-self: end;
+  /* The wrapper holds the switch at its max-content width, so the two buttons keep their
+     natural widths and their labels never wrap. The cap keeps the control inside its area. */
+  width: max-content;
+  max-width: 100%;
+}
+
+/* Feature 012: below the locale's stacking threshold the control takes a row of its own and
+   the title block spans the full width, so the two can never overlap. The threshold is in the
+   content area's own font-size units, so it scales with the visitor's text size. */
+@container (max-width: 35em) {
+  .home__header__title {
+    grid-column: 1 / -1;
+  }
+
+  .home__header__control {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+
+/* The Spanish tagline is the longer one, so it needs a wider content area to share the row. */
+@container (max-width: 38em) {
+  html[lang='es'] .home__header__title {
+    grid-column: 1 / -1;
+  }
+
+  html[lang='es'] .home__header__control {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
+  }
 }
 
 .game-list {

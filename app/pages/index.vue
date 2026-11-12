@@ -36,11 +36,13 @@ const stateFor = (game: GameId) => progress.getGameState(game)
 <template>
   <main class="home">
     <header class="home__header">
-      <div>
+      <div class="home__header__title">
         <h1>{{ t('app.title') }}</h1>
         <p class="muted">{{ t('app.tagline') }}</p>
       </div>
-      <LanguageControl />
+      <div class="home__header__control">
+        <LanguageControl />
+      </div>
     </header>
 
     <CountdownBadge />
