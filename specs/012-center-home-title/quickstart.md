@@ -46,8 +46,8 @@ window is resized.
 
 Expected: the tagline is centered on the title's own center line in both languages; it is not
 left-aligned under a centered title, and it is neither clipped nor truncated. Where the tagline
-wraps onto two lines, each line stays centered on the same center line and the tagline's box hugs
-its widest line.
+wraps onto two lines, each line stays centered on the same center line, and the tagline's box
+stays inside the content area and centered on it.
 
 ### 3. The language control keeps its place
 

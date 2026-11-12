@@ -52,12 +52,16 @@ two locales' thresholds apart.
 - The title and the tagline form one unit and are centered together on the same horizontal center
   line.
 - Each of the title's and the tagline's boxes hugs its own text and is centered on that line. The
-  hug assertion has two forms, and the check picks the one that applies at the width under test:
+  placement assertion has two forms, and the check picks the one that applies at the width under
+  test:
   - **where the text fits on one line** (every tested width at the default text size), the box
     width equals the text run's width within 1 px;
-  - **where the text wraps onto two lines** (320 px and 360 px at 200% text zoom), the box hugs the
-    *widest* rendered line: the box width equals the widest line's width within 1 px, and every
-    rendered line stays centered on the title's center line.
+  - **where the text wraps onto two lines** (320 px and 360 px at 200% text zoom), the rule is
+    measured on the *rendered text run* rather than on the box: a block-level box cannot hug its
+    widest wrapped line, because `fit-content` resolves to `min(max-content, available)` and the
+    box therefore takes the whole available width. Every rendered line stays centered on the
+    title's center line within 2 px, the tagline is neither clipped nor truncated, and the
+    tagline's box stays inside the content area and centered on it.
 - The title's and the tagline's text never overflows the content area and is never clipped or
   truncated. When the text is too wide for the content area it wraps inside it, and the wrapped
   text stays centered on the same center line.
@@ -74,13 +78,13 @@ two locales' thresholds apart.
   The switch's own rule is not changed to achieve this — the switch is used only by the home page,
   and the reason it stays untouched is its two button labels ("Español" and "English") and the
   shared switch styling, which are reused exactly as they are.
-- One case is narrower than the natural width: at the 320 px viewport with 200% text zoom the
-  content area is 288 px while the control's natural width is 371.8 px, so no layout can keep both
-  buttons on one row there. The control stays fully inside the content area, flush right, and
-  operable, and the switch's own wrapping puts the two buttons on two rows, each still at its
-  natural width with its label intact. At the default text size the narrowest supported viewport
-  (320 px) leaves a content area of 304 px, wider than the control's 187.9 px natural width, so this
-  case does not occur there.
+- Two widths are narrower than the natural width: at the 320 px viewport with 200% text zoom the
+  content area is 288 px, and at the 360 px viewport it is 328 px, while the control's natural
+  width is 371.8 px, so no layout can keep both buttons on one row there. The control stays fully
+  inside the content area, flush right, and operable, and the switch's own wrapping puts the two
+  buttons on two rows, each still at its natural width with its label intact. At the default text
+  size the narrowest supported viewport (320 px) leaves a content area of 304 px, wider than the
+  control's 187.9 px natural width, so this case does not occur there.
 - The control is operable by pointer and by keyboard, and its focus indicator is visible.
 - The control never moves to any corner other than the content area's top-right.
 

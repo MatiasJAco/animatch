@@ -91,6 +91,14 @@ export const SHARED_ROW_BEFORE: Record<Locale, Record<string, boolean>> = {
   },
 }
 
+/**
+ * The language switch's natural width at a 32 px root font (200% text zoom), measured on the
+ * reference platform. The content area is narrower than this at 320x640 (288 px) and at 360x640
+ * (328 px), so at both of those widths the switch's own wrapping puts its two buttons on two
+ * rows, each still at its natural width with its label intact.
+ */
+export const SWITCH_NATURAL_WIDTH_AT_200_PERCENT = 371.83
+
 /** A measured box in viewport coordinates. */
 export interface Box {
   top: number
@@ -292,6 +300,35 @@ export async function measureCountdown(page: Page): Promise<Box | null> {
   })
 }
 
+/**
+ * A language button's natural width: its own text run plus the horizontal padding and borders
+ * it is given. A button that a narrower container squeezed measures less than this.
+ */
+export async function measureButtonNaturalWidth(
+  page: Page,
+  index: number,
+): Promise<number | null> {
+  return page.evaluate((nth) => {
+    const button = document.querySelector(
+      `main.home header [role="group"] button:nth-of-type(${nth})`,
+    ) as HTMLElement | null
+    if (!button) return null
+    const style = getComputedStyle(button)
+    const range = document.createRange()
+    range.selectNodeContents(button)
+    const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
+    if (rects.length === 0) return null
+    const textWidth = rects.reduce((widest, rect) => Math.max(widest, rect.right - rect.left), 0)
+    return (
+      textWidth +
+      (Number.parseFloat(style.paddingLeft) || 0) +
+      (Number.parseFloat(style.paddingRight) || 0) +
+      (Number.parseFloat(style.borderLeftWidth) || 0) +
+      (Number.parseFloat(style.borderRightWidth) || 0)
+    )
+  }, index)
+}
+
 /** The headings of the page in document order, as tag names. */
 export async function measureHeadingOrder(page: Page): Promise<string[]> {
   return page.evaluate(() =>
@@ -390,6 +427,81 @@ async function assertTitleCentered(page: Page, label: string): Promise<void> {
 }
 
 /**
+ * The tagline's placement rule, in the two forms the rendered lines select.
+ *
+ * One line: the tagline's box hugs its own text, so the box width equals the text run's width
+ * within 1 px.
+ *
+ * Wrapped: a block-level box cannot hug its widest wrapped line — `fit-content` resolves to
+ * `min(max-content, available)`, so once the tagline wraps its box takes the whole available
+ * width — so the rule is measured on the rendered text run instead: every rendered line stays
+ * centered on the title's center line, the tagline is neither clipped nor truncated, and the box
+ * stays inside the content area and centered on it.
+ */
+async function assertTaglinePlacement(page: Page, label: string): Promise<void> {
+  const titleRun = await measureTextRun(page, 'main.home h1')
+  const taglineRun = await measureTextRun(page, 'main.home h1 + p')
+  const taglineBox = await measureBox(page, 'main.home h1 + p')
+  const content = await measureContentArea(page)
+  expect(titleRun, `title text run missing at ${label}`).not.toBeNull()
+  expect(taglineRun, `tagline text run missing at ${label}`).not.toBeNull()
+  expect(taglineBox, `tagline box missing at ${label}`).not.toBeNull()
+  expect(content, `content area missing at ${label}`).not.toBeNull()
+
+  // The tagline never overflows its own box: it is neither clipped nor truncated.
+  const clipped = await page.evaluate(() => {
+    const tagline = document.querySelector('main.home h1 + p') as HTMLElement
+    return {
+      horizontal: tagline.scrollWidth - tagline.clientWidth,
+      vertical: tagline.scrollHeight - tagline.clientHeight,
+    }
+  })
+  expect
+    .soft(clipped.horizontal, `the tagline must not be clipped at ${label}`)
+    .toBeLessThanOrEqual(1)
+  expect
+    .soft(clipped.vertical, `the tagline must not be truncated at ${label}`)
+    .toBeLessThanOrEqual(1)
+
+  // The tagline rides on the title's own center line.
+  expect
+    .soft(
+      Math.abs(taglineRun!.mid - titleRun!.mid),
+      `the tagline must sit on the title's center line at ${label}`,
+    )
+    .toBeLessThanOrEqual(ALIGN_TOLERANCE)
+
+  if (taglineRun!.lines > 1) {
+    // Wrapped: the rule is measured on the rendered text run.
+    for (const lineMid of taglineRun!.lineMids) {
+      expect
+        .soft(
+          Math.abs(lineMid - titleRun!.mid),
+          `every rendered tagline line must stay on the title's center line at ${label}`,
+        )
+        .toBeLessThanOrEqual(ALIGN_TOLERANCE)
+    }
+    expect
+      .soft(taglineBox!.width, `the tagline must stay inside the content area at ${label}`)
+      .toBeLessThanOrEqual(content!.width + 1)
+    expect
+      .soft(
+        Math.abs((taglineBox!.left + taglineBox!.right) / 2 - content!.mid),
+        `the tagline box must stay centered at ${label}`,
+      )
+      .toBeLessThanOrEqual(ALIGN_TOLERANCE)
+  } else {
+    // One line: the box hugs its own text.
+    expect
+      .soft(
+        Math.abs(taglineBox!.width - taglineRun!.width),
+        `the tagline box must hug its text at ${label}`,
+      )
+      .toBeLessThanOrEqual(HUG_TOLERANCE)
+  }
+}
+
+/**
  * Whether the control shares the title's row or has a row of its own, per locale and width.
  * The thresholds are the contract's: 38 em for Spanish and 35 em for English, measured against
  * the content area. 600x800 is inside that band, so the two locales differ there.
@@ -431,6 +543,19 @@ test.describe('centered home header', () => {
         await page.waitForSelector('[data-home-catalog] [data-game-card]')
         await waitForLocale(page, locale)
         await assertTitleCentered(page, `${viewport.name}/${locale}`)
+
+        // The page never scrolls sideways and nothing reaches past the viewport's edges, at
+        // every width from 320 to 1920 pixels, in both languages.
+        const scroll = await measureHorizontalScroll(page)
+        expect
+          .soft(scroll.scrollWidth, `the page must not scroll sideways at ${viewport.name}/${locale}`)
+          .toBe(scroll.clientWidth)
+        expect
+          .soft(
+            await measureHorizontalOverflow(page),
+            `nothing may reach past the viewport at ${viewport.name}/${locale}`,
+          )
+          .toEqual([])
       }
     }
 
@@ -473,54 +598,7 @@ test.describe('centered home header', () => {
           .soft(relation.text, `unexpected tagline text at ${label}`)
           .toBe(TAGLINE_TEXT[locale])
 
-        const titleRun = await measureTextRun(page, 'main.home h1')
-        const taglineRun = await measureTextRun(page, 'main.home h1 + p')
-        const taglineBox = await measureBox(page, 'main.home h1 + p')
-        expect(titleRun, `title text run missing at ${label}`).not.toBeNull()
-        expect(taglineRun, `tagline text run missing at ${label}`).not.toBeNull()
-        expect(taglineBox, `tagline box missing at ${label}`).not.toBeNull()
-
-        expect
-          .soft(
-            Math.abs(taglineRun!.mid - titleRun!.mid),
-            `the tagline must sit on the title's center line at ${label}`,
-          )
-          .toBeLessThanOrEqual(ALIGN_TOLERANCE)
-
-        // The hug rule has two forms; the one that applies is picked by the rendered lines.
-        if (taglineRun!.lines > 1) {
-          for (const lineMid of taglineRun!.lineMids) {
-            expect
-              .soft(
-                Math.abs(lineMid - titleRun!.mid),
-                `every rendered tagline line must stay on the title's center line at ${label}`,
-              )
-              .toBeLessThanOrEqual(ALIGN_TOLERANCE)
-          }
-        } else {
-          expect
-            .soft(
-              Math.abs(taglineBox!.width - taglineRun!.width),
-              `the tagline box must hug its text at ${label}`,
-            )
-            .toBeLessThanOrEqual(HUG_TOLERANCE)
-        }
-
-        if (viewport.width === 320) {
-          const clipped = await page.evaluate(() => {
-            const tagline = document.querySelector('main.home h1 + p') as HTMLElement
-            return {
-              horizontal: tagline.scrollWidth - tagline.clientWidth,
-              vertical: tagline.scrollHeight - tagline.clientHeight,
-            }
-          })
-          expect
-            .soft(clipped.horizontal, `the tagline must not be clipped at ${label}`)
-            .toBeLessThanOrEqual(1)
-          expect
-            .soft(clipped.vertical, `the tagline must not be truncated at ${label}`)
-            .toBeLessThanOrEqual(1)
-        }
+        await assertTaglinePlacement(page, label)
       }
     }
   })
@@ -845,53 +923,16 @@ test.describe('centered home header', () => {
         // The title and the tagline stay on the content area's center line.
         const content = await measureContentArea(page)
         const titleRun = await measureTextRun(page, 'main.home h1')
-        const taglineRun = await measureTextRun(page, 'main.home h1 + p')
-        const taglineBox = await measureBox(page, 'main.home h1 + p')
         expect(content, `the content area is missing at ${label}`).not.toBeNull()
         expect(titleRun, `the title text run is missing at ${label}`).not.toBeNull()
-        expect(taglineRun, `the tagline text run is missing at ${label}`).not.toBeNull()
         expect
           .soft(
             Math.abs(titleRun!.mid - content!.mid),
             `the title must stay centered at ${label}`,
           )
           .toBeLessThanOrEqual(ALIGN_TOLERANCE)
-        expect
-          .soft(
-            Math.abs(taglineRun!.mid - titleRun!.mid),
-            `the tagline must stay on the title's center line at ${label}`,
-          )
-          .toBeLessThanOrEqual(ALIGN_TOLERANCE)
 
-        // The hug rule has two forms. Where the tagline fits on one line its box hugs the
-        // text; where it wraps, the box spans the content area and every rendered line
-        // stays centered on the title's own center line.
-        if (taglineRun!.lines > 1) {
-          for (const lineMid of taglineRun!.lineMids) {
-            expect
-              .soft(
-                Math.abs(lineMid - titleRun!.mid),
-                `every rendered tagline line must stay centered at ${label}`,
-              )
-              .toBeLessThanOrEqual(ALIGN_TOLERANCE)
-          }
-          expect
-            .soft(taglineBox!.width, `the tagline must stay inside the content area at ${label}`)
-            .toBeLessThanOrEqual(content!.width + 1)
-          expect
-            .soft(
-              Math.abs((taglineBox!.left + taglineBox!.right) / 2 - content!.mid),
-              `the tagline box must stay centered at ${label}`,
-            )
-            .toBeLessThanOrEqual(ALIGN_TOLERANCE)
-        } else {
-          expect
-            .soft(
-              Math.abs(taglineBox!.width - taglineRun!.width),
-              `the tagline box must hug its text at ${label}`,
-            )
-            .toBeLessThanOrEqual(HUG_TOLERANCE)
-        }
+        await assertTaglinePlacement(page, label)
 
         // The control stays fully inside the content area, flush right, and complete.
         const control = await measureControl(page)
@@ -910,9 +951,11 @@ test.describe('centered home header', () => {
           .toBeLessThanOrEqual(1)
         expect.soft(control!.buttons, `the control must keep its two buttons at ${label}`).toHaveLength(2)
 
-        if (viewport.width === 320) {
-          // The one case where the content area is narrower than the control: the two buttons
-          // sit on two rows, each at its natural width with its label intact.
+        if (content!.width < SWITCH_NATURAL_WIDTH_AT_200_PERCENT) {
+          // The content area is narrower than the switch's natural width (288 px at 320x640,
+          // 328 px at 360x640): no layout can keep both buttons on one row there, so the
+          // switch's own wrapping puts them on two rows, each still at its natural width with
+          // its label intact.
           expect
             .soft(
               sharesRow(control!.buttons[0], control!.buttons[1]),
@@ -926,6 +969,14 @@ test.describe('centered home header', () => {
             )
             expect(run, `the language label is missing at ${label}`).not.toBeNull()
             expect.soft(run!.lines, `the language label must stay intact at ${label}`).toBe(1)
+            const natural = await measureButtonNaturalWidth(page, index)
+            expect(natural, `the language button's natural width is missing at ${label}`).not.toBeNull()
+            expect
+              .soft(
+                Math.abs(control!.buttons[index - 1].width - natural!),
+                `the language button must keep its natural width at ${label}`,
+              )
+              .toBeLessThanOrEqual(1)
           }
         }
 

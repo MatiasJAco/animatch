@@ -82,12 +82,16 @@ The muted subtitle directly beneath the title.
 - `|textMidpoint - homeTitle.textMidpoint| <= 2` — the tagline sits on the title's center line.
 - The tagline is the element immediately below the title in the rendered page.
 - The tagline is never clipped or truncated in either locale, including at 200% text zoom.
-- The hug assertion has two forms, and the check picks the one that applies at the width under test:
+- The placement assertion has two forms, and the check picks the one that applies at the width
+  under test:
   - where the tagline fits on one line (every tested width at the default text size),
     `|boxWidth - textRunWidth| <= 1`;
-  - where the tagline wraps onto two lines (320 px and 360 px at 200% text zoom),
-    `|boxWidth - widestLineWidth| <= 1` and every rendered line stays centered on the title's
-    center line.
+  - where the tagline wraps onto two lines (320 px and 360 px at 200% text zoom), the rule is
+    measured on the rendered text run, because a block-level box cannot hug its widest wrapped
+    line — `fit-content` resolves to `min(max-content, available)`, so the box takes the whole
+    available width. Every rendered line stays centered on the title's center line within 2 px,
+    the tagline is neither clipped nor truncated, and the tagline's box stays inside the content
+    area and centered on it.
 
 ## Entity: Header Block
 
@@ -130,10 +134,11 @@ The header's language switcher.
   by the wrapper (`width: max-content` with `max-width: 100%`), not by editing `.lang-switch`,
   which stays untouched because the switch is used only by the home page and its two button labels
   and shared styling must be reused exactly as they are.
-- The one case where the content area is narrower than the control's natural width is the 320 px
-  viewport at 200% text zoom (content area 288 px, natural width 371.8 px): the control stays
-  fully inside the content area, flush right, and operable, and the switch's own wrapping puts the
-  two buttons on two rows, each still at its natural width with its label intact.
+- Two widths are narrower than the control's natural width: the 320 px viewport at 200% text zoom
+  (content area 288 px) and the 360 px viewport (content area 328 px), against a natural width of
+  371.8 px: the control stays fully inside the content area, flush right, and operable, and the
+  switch's own wrapping puts the two buttons on two rows, each still at its natural width with its
+  label intact.
 - The control is on its own row only when the content area is narrower than the stacking threshold
   for the active locale (38 em for `es`, 35 em for `en`).
 - The control's markup, roles, labels, and `aria-pressed` state are unchanged.
