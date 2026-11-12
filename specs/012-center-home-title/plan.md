@@ -121,13 +121,16 @@ header's vertical rhythm do not change.
 content area wraps and shrinks inside it instead of spilling past the page edges, and at 200% text
 zoom the wrapped text stays centered on the same line.
 
-The hug assertion therefore has two forms, and the check picks the one that applies at the width
-under test. Where the tagline fits on one line — every tested width at the default text size — the
-tagline's box width must equal its text run's width within 1 px, because the box hugs one line of
-text. Where the tagline wraps onto two lines (320 px and 360 px at 200% text zoom), the box hugs
-the *widest* line instead: its width must equal the widest line's width within 1 px, and each
-rendered line must stay centered on the title's center line. The midpoint assertion is the same in
-both cases.
+The placement assertion therefore has two forms, and the check picks the one that applies at the
+width under test. Where the tagline fits on one line — every tested width at the default text
+size — the tagline's box width must equal its text run's width within 1 px, because the box hugs
+one line of text. Where the tagline wraps onto two lines (320 px and 360 px at 200% text zoom),
+the rule is measured on the *rendered text run* rather than on the box: a block-level box cannot
+hug its widest wrapped line, because `fit-content` resolves to `min(max-content, available)` and
+the box therefore takes the whole available width. Every rendered line must stay centered on the
+title's center line within 2 px, the tagline must be neither clipped nor truncated, and the
+tagline's box must stay inside the content area and centered on it. The midpoint assertion is the
+same in both cases.
 
 ### Language control placement and stacking
 
@@ -216,14 +219,15 @@ Measured result of this rule set (Chromium, project's own stylesheet, 16 px and 
 - the switch's right edge stays flush with the content area's right edge in both the shared-row and
   the stacked state.
 
-**The one case where the content area is narrower than the control** is the 320 px viewport at
-200% text zoom: the content area is 288 px there, while the control's natural width is 371.8 px, so
-no layout can keep both buttons on one row. `max-width: 100%` keeps the control inside the content
-area, and the switch's own `flex-wrap` puts the two buttons on two rows, each still at its natural
-width with its label intact; the control stays visible, flush right, and operable. At the default
-text size the narrowest supported viewport (320 px) leaves a content area of 304 px, wider than the
-control's 187.9 px natural width, so this case does not occur there — the narrowest case is
-asserted in the 200% zoom test, not in the width matrix.
+**Two widths are narrower than the control**: at the 320 px viewport with 200% text zoom the
+content area is 288 px, and at the 360 px viewport it is 328 px, while the control's natural width
+is 371.8 px, so no layout can keep both buttons on one row at either of them. `max-width: 100%`
+keeps the control inside the content area, and the switch's own `flex-wrap` puts the two buttons
+on two rows, each still at its natural width with its label intact; the control stays visible,
+flush right, and operable. At the default text size the narrowest supported viewport (320 px)
+leaves a content area of 304 px, wider than the control's 187.9 px natural width, so this case
+does not occur there — the narrowest case is asserted in the 200% zoom test, at both of the
+narrower widths, not in the width matrix.
 
 If a future platform's font metrics make the threshold too generous, the failure mode is benign:
 the switch wraps onto two rows instead of overlapping the title, and the new viewport check fails
