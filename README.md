@@ -70,10 +70,12 @@ verification tooling and is never shipped.
 | Path | Holds |
 |------|-------|
 | `app/` | Everything the browser renders: pages, components, composables, styles, messages |
-| `public/games/` | Original SVG artwork shown on each home game card |
+| `public/games/` | The artwork shown on each home game card: one image file per game |
+| `public/artwork/` | The Matchi mascot shown on the home page |
+| `artwork/sources/` | The committed source artwork the shipped images were derived from; never served |
 | `server/` | Everything that touches the database: API routes, generators, catalog queries |
 | `migrations/` | This app's own schema changes, one file per change |
-| `scripts/` | Operational scripts such as the migration runner |
+| `scripts/` | Operational scripts such as the migration runner and the artwork pipeline |
 | `tests/` | The automated vitest suite |
 | `e2e/` | The Playwright viewport-fit gate |
 | `specs/001-daily-anime-puzzles/` | Specification, plan, research, data model, contract, tasks |
@@ -81,10 +83,43 @@ verification tooling and is never shipped.
 
 ## Home game artwork
 
-Each home card uses one original SVG from `public/games/`. The file names match the game route
-slugs, and `app/utils/gameArt.ts` maps each game to its path. To replace an image, overwrite the
-matching SVG; no component or CSS change is needed. If you rename the file, update the one-line
-mapping. A missing or broken image falls back to the neutral card placeholder.
+Each home card uses exactly one image file from `public/games/`. The file names match the game
+route slugs, and `app/utils/gameArt.ts` maps each game to its path. To replace an image, overwrite
+the matching file; no component or CSS change is needed. If you rename the file, update the
+one-line mapping. A missing or broken image falls back to the neutral card placeholder.
+
+The three Match the Series cards carry seasonal artwork as processed WebP files
+(`match-the-series-spring-2026.webp`, `match-the-series-summer-2026.webp` and
+`match-the-series-autumn-2026.webp`, each 800x450). Each one frames the character from the crown
+of the head down to the waist at its own scale, with a blurred continuation of the same scene in
+the lateral margins. The More or Less and Groups cards keep their
+original SVG illustrations. `public/artwork/matchi-mascot.webp` is the Matchi mascot that floats
+over the home page; it is decorative, adds no focus stop and never intercepts a click. On
+viewports of 1024 pixels and wider it fills 80 % of the free column to the right of the
+centered catalog, and below that it scales down with the viewport.
+
+Known limitation, accepted by the project owner on 2026-11-13: at 200% browser text zoom the
+mascot overlaps card text at viewports narrower than about 1024 pixels, because a wrapped
+card-summary line reaches the corner the mascot occupies and no single size token is both wide
+enough to be legible at 320 pixels and narrow enough to clear the text at 480 pixels. At the
+default text size no card text is covered at any tested viewport. See
+[specs/013-home-artwork/contracts/home-mascot.md](specs/013-home-artwork/contracts/home-mascot.md) §5.
+
+`artwork/sources/` holds the original artwork the shipped images were derived from — the seasonal
+scenes and the mascot. It sits outside `public/`, so it is never served: the sources are a project
+record, and every shipped file is a smaller, re-encoded derivative of exactly one of them. The
+file format is always detected from the content, never from the extension.
+
+To regenerate or re-check the processed assets you need Python 3 with Pillow 12.x:
+
+```bash
+npm run artwork:build            # python3 scripts/artwork/build.py — rebuild from artwork/sources/
+npm run artwork:check            # python3 scripts/artwork/check.py — verify them against the sources
+npm run artwork:check -- --rebuild   # also rebuild into a temporary directory and compare the bytes
+```
+
+Pillow is a build-time tool only: it is not an npm dependency, the app never imports it, and the
+processed assets are committed, so building, running and deploying the app never needs it.
 
 ## Ground rules
 
