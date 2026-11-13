@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:viewport": "playwright test",
-    "db:migrate": "node scripts/migrate.ts"
+    "db:migrate": "node scripts/migrate.ts",
+    "artwork:build": "python3 scripts/artwork/build.py",
+    "artwork:check": "python3 scripts/artwork/check.py"
   },
   "dependencies": {
     "nuxt": "^3.0.0",

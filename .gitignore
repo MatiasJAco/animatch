@@ -1,6 +1,12 @@
 # Dependencies
 node_modules/
 
+# Python (build-time artwork tooling under scripts/artwork/)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
 # Nuxt build output
 .nuxt/
 .output/

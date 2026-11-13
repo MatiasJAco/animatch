@@ -65,5 +65,9 @@ const stateFor = (game: GameId) => progress.getGameState(game)
       </ul>
     </template>
     <p v-else>{{ t('common.loading') }}</p>
+
+    <!-- The mascot is decorative and fixed to the viewport, so it appears on the home
+         page only and reserves no space in the catalog. -->
+    <HomeMascot />
   </main>
 </template>
