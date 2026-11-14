@@ -71,7 +71,7 @@ verification tooling and is never shipped.
 |------|-------|
 | `app/` | Everything the browser renders: pages, components, composables, styles, messages |
 | `public/games/` | The artwork shown on each home game card: one image file per game |
-| `public/artwork/` | The Matchi mascot shown on the home page |
+| `public/artwork/` | The Matchi mascot shown on the home screen and the five game screens |
 | `artwork/sources/` | The committed source artwork the shipped images were derived from; never served |
 | `server/` | Everything that touches the database: API routes, generators, catalog queries |
 | `migrations/` | This app's own schema changes, one file per change |
@@ -94,9 +94,21 @@ The three Match the Series cards carry seasonal artwork as processed WebP files
 of the head down to the waist at its own scale, with a blurred continuation of the same scene in
 the lateral margins. The More or Less and Groups cards keep their
 original SVG illustrations. `public/artwork/matchi-mascot.webp` is the Matchi mascot that floats
-over the home page; it is decorative, adds no focus stop and never intercepts a click. On
-viewports of 1024 pixels and wider it fills 80 % of the free column to the right of the
-centered catalog, and below that it scales down with the viewport.
+over the home screen and the five game screens; it is decorative, adds no focus stop and never
+intercepts a click. It is the same mascot everywhere: one file, one size rule and one corner — the
+viewport's bottom inline-end corner — on the home screen and on every game screen, in every state
+a game screen can be in (loading, playing, finished and puzzle-unavailable). On viewports of 1024
+pixels and wider it fills 80 % of the free column to the right of the centered catalog, and below
+that it scales down with the viewport. See
+[specs/014-game-mascot/contracts/game-mascot.md](specs/014-game-mascot/contracts/game-mascot.md).
+
+Known limitation, accepted by the project owner on 2026-11-14: below 1024 pixels the game screen's
+column reaches the window's edge, so the mascot floats over the board's bottom inline-end region and
+may visually cover tile artwork, labels, counts, the More/Fewer buttons and the status copy. What it
+never does is change the layout, swallow a click, add a scrollbar, or remove, hide or truncate any
+text: every control beneath it still answers clicks and taps, and the covered content can be
+scrolled out from under it. The overlap is a recorded limitation, not a defect to engineer away —
+resizing or moving the mascot would break "the same mascot everywhere".
 
 Known limitation, accepted by the project owner on 2026-11-13: at 200% browser text zoom the
 mascot overlaps card text at viewports narrower than about 1024 pixels, because a wrapped

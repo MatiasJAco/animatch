@@ -17,11 +17,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <span class="home-mascot" data-home-mascot aria-hidden="true">
+  <span class="mascot" data-mascot aria-hidden="true">
     <img
       v-if="!failed"
       ref="image"
-      class="home-mascot__img"
+      class="mascot__img"
       data-mascot-image
       src="/artwork/matchi-mascot.webp"
       alt=""

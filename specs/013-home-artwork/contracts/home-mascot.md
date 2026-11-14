@@ -6,14 +6,31 @@ Covers the Matchi mascot: how it is rendered on the home page, how it is placed 
 behaves for pointer, keyboard, and assistive-technology users, and what happens when it fails to
 load.
 
+> **Superseded in part by feature 014** ([spec.md](../../014-game-mascot/spec.md)), 2026-11-14.
+> FR-011 of this feature — "the mascot MUST appear on the home page only; game screens MUST keep
+> their current presentation" — no longer holds: the mascot also appears on the five game screens
+> (More or Less, Groups and the Spring/Summer/Autumn 2026 editions of Match the Series), in every
+> state they can be in, with the same asset, the same size rule, the same corner and the same
+> failure behaviour. The game-screen rules live in
+> [feature 014's contract](../../014-game-mascot/contracts/game-mascot.md). Everything else in this
+> contract remains in force.
+>
+> The home screen's own behaviour described here is unchanged: its rendered size, its corner, its
+> behaviour and its file stay exactly as they are, with 0 differences. The implementation shares
+> a single mascot component across the home screen and the game screens, and renames the
+> mascot's markup, class names and test hooks, because those are internal and no visitor can see
+> them. The names below are the current ones; the previous names are recorded in §8.
+
 ## 1. Component and DOM
 
-`app/components/HomeMascot.vue`, used by `app/pages/index.vue` only.
+One component, shared by the home screen and the game screens:
+`app/components/Mascot.vue`, rendered by `app/pages/index.vue` on the home screen and by
+`app/components/GameShell.vue` on the five game screens.
 
 ```text
-<span class="home-mascot" data-home-mascot aria-hidden="true">
+<span class="mascot" data-mascot aria-hidden="true">
   <img
-    class="home-mascot__img"
+    class="mascot__img"
     data-mascot-image
     src="/artwork/matchi-mascot.webp"
     alt=""
@@ -42,8 +59,10 @@ load.
   FR-004).
 - It does not move relative to the viewport when the visitor scrolls by wheel, touch, or keyboard
   (FR-001).
-- It appears on the home page only. Game screens, error pages, and shared result pages are
-  unchanged (FR-011).
+- **Superseded by feature 014:** the mascot now also appears on the five game screens, in every
+  state they can be in. The error page and any other screen keep their current presentation
+  (feature 013 FR-011, superseded by feature 014). The home screen's own placement and behaviour
+  in this section are unchanged.
 - It never animates and has no transition, so a visitor who prefers reduced motion sees exactly
   the same frame as every other visitor (FR-009).
 
@@ -54,7 +73,7 @@ band, and the source aspect ratio is preserved so the browser reserves the box b
 arrives.
 
 ```css
-.home-mascot {
+.mascot {
   --mascot-ratio: 640 / 1137;
   --mascot-size: min(17vw, calc(17dvh * 640 / 1137));
   inline-size: var(--mascot-size);
@@ -62,11 +81,15 @@ arrives.
 }
 
 @media (min-width: 1024px) {
-  .home-mascot {
+  .mascot {
     --mascot-size: min(calc((100vw - 55rem) / 2 * 0.8), calc(53dvh * 640 / 1137));
   }
 }
 ```
+
+The rule itself is unchanged by feature 014: the same token, the same two bands, the same 1024-pixel
+boundary, and the same values. The game screens use it unchanged and do not re-derive it from
+their own, narrower content column — see feature 014's contract §5.
 
 | Band | Applies at viewport widths | Catalog geometry at that width | `--mascot-size` |
 |------|---------------------------|-------------------------------|-----------------|
@@ -178,10 +201,34 @@ arrives.
 5. With the mascot request failed, the catalog is complete, no broken-image indicator appears,
    and the card images fall back to the existing neutral placeholder.
 
-The measured boxes are the ones tabulated in §3. In band 2 the mascot's height lands exactly on
-the 30% ceiling at 1440x900 and at 1920x1080, so the size-share assertion runs at its limit
-there; in band 1 the widest measured box is 17.0% of the viewport width and the tallest is 17.0%
+The measured boxes are the ones tabulated in §3. In band 2 the mascot's height reaches 44.2 % of
+the viewport height at 1440x900 and 53.0 % at 1920x1080, both inside the 55 % ceiling that
+FR-005 sets, so the size-share assertion runs close to its limit there; in band 1 the widest
+measured box is 17.0% of the viewport width and the tallest is 17.0%
 of the viewport height, both inside the FR-005 ceilings.
 
 `npm test` → `tests/artwork-assets.test.ts` asserts the mascot asset's own contract: 640x1137
 pixels, a transparent background, at most 150 KB, smaller than its source, and not a copy of it.
+
+Feature 014 extends this verification to the five game screens: it asserts the same rendered size,
+the same corner and the same file on each of them, and re-runs the existing game checks with the
+mascot present. See `specs/014-game-mascot/spec.md` (SC-001, SC-002, SC-012, SC-018) and
+[feature 014's contract](../../014-game-mascot/contracts/game-mascot.md) §10.
+
+## 8. Renamed identifiers
+
+Feature 014 renamed the mascot's internal identifiers when the component became shared. The
+rendering, the size, the corner, the behaviour and the file are unchanged; the names below are
+internal and no visitor can see them.
+
+| Before | After |
+|--------|-------|
+| `app/components/HomeMascot.vue` | `app/components/Mascot.vue` |
+| `.home-mascot` | `.mascot` |
+| `.home-mascot__img` | `.mascot__img` |
+| `data-home-mascot` | `data-mascot` |
+| `data-mascot-image` | `data-mascot-image` (unchanged) |
+| `/artwork/matchi-mascot.webp` | unchanged |
+
+The home screen's own suite, `e2e/home-artwork.spec.ts`, is updated for the renamed test hook
+only: no test is added, removed or weakened.

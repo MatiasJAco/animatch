@@ -14,5 +14,8 @@ defineProps<{ title: string }>()
       </div>
     </header>
     <slot />
+    <!-- The mascot is decorative and fixed to the viewport. It sits outside every state branch
+         of the slot — loading, error, result and board — so it is present in every state. -->
+    <Mascot />
   </main>
 </template>

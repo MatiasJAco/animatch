@@ -75,7 +75,7 @@ async function seedFinished(page: Page, game: string): Promise<void> {
 }
 
 async function mascotRect(page: Page): Promise<Rect | null> {
-  const box = await page.locator('[data-home-mascot]').boundingBox()
+  const box = await page.locator('[data-mascot]').boundingBox()
   if (!box) return null
   return {
     left: box.x,
@@ -120,7 +120,7 @@ test.describe('home mascot', () => {
       await page.goto('/')
       await waitForCatalog(page)
 
-      const mascot = page.locator('[data-home-mascot]')
+      const mascot = page.locator('[data-mascot]')
       await expect(mascot).toBeVisible()
 
       let anchor: Rect | null = null
@@ -185,7 +185,7 @@ test.describe('home mascot', () => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height })
         await page.goto('/')
         await waitForCatalog(page)
-        await expect(page.locator('[data-home-mascot]')).toBeVisible()
+        await expect(page.locator('[data-mascot]')).toBeVisible()
         await expect(page.locator('[data-card-state]')).toHaveCount(1)
 
         for (const top of await scrollPositions(page)) {
@@ -194,7 +194,7 @@ test.describe('home mascot', () => {
           // The rectangle of the text itself, not of the block that holds it: the card
           // text is left-aligned, so the inline-end corner of a card carries no text.
           const overlaps = await page.evaluate(() => {
-            const mascot = document.querySelector('[data-home-mascot]')
+            const mascot = document.querySelector('[data-mascot]')
             if (!mascot) return { missing: true, hits: [] as string[] }
             const box = mascot.getBoundingClientRect()
             const hits: string[] = []
@@ -234,7 +234,7 @@ test.describe('home mascot', () => {
           await scrollTo(page, top)
 
           const target = await page.evaluate(() => {
-            const mascot = document.querySelector('[data-home-mascot]')
+            const mascot = document.querySelector('[data-mascot]')
             if (!mascot) return null
             const box = mascot.getBoundingClientRect()
             for (const card of Array.from(
@@ -272,7 +272,7 @@ test.describe('home mascot', () => {
         } else {
           // No card lies under the mascot: it must stand clear of the catalog column.
           const overlapsCatalog = await page.evaluate(() => {
-            const mascot = document.querySelector('[data-home-mascot]')
+            const mascot = document.querySelector('[data-mascot]')
             const catalog = document.querySelector('[data-home-catalog]')
             if (!mascot || !catalog) return true
             const a = mascot.getBoundingClientRect()
@@ -294,11 +294,11 @@ test.describe('home mascot', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/')
     await waitForCatalog(page)
-    await expect(page.locator('[data-home-mascot]')).toBeVisible()
+    await expect(page.locator('[data-mascot]')).toBeVisible()
 
     // No focusable element inside the mascot.
     const focusableInside = await page.evaluate(() => {
-      const mascot = document.querySelector('[data-home-mascot]')
+      const mascot = document.querySelector('[data-mascot]')
       if (!mascot) return -1
       return mascot.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')
         .length
@@ -311,7 +311,7 @@ test.describe('home mascot', () => {
       await page.keyboard.press('Tab')
       const inside = await page.evaluate(() => {
         const active = document.activeElement
-        const mascot = document.querySelector('[data-home-mascot]')
+        const mascot = document.querySelector('[data-mascot]')
         return Boolean(active && mascot && mascot.contains(active))
       })
       if (inside) landedOnMascot = true
@@ -329,7 +329,7 @@ test.describe('home mascot', () => {
           transitionDuration: style.transitionDuration,
         }
       }
-      return { wrapper: read('[data-home-mascot]'), image: read('[data-mascot-image]') }
+      return { wrapper: read('[data-mascot]'), image: read('[data-mascot-image]') }
     })
     expect(motion.wrapper, 'the mascot wrapper is missing').not.toBeNull()
     expect(motion.image, 'the mascot image is missing').not.toBeNull()
@@ -356,7 +356,7 @@ test.describe('home mascot', () => {
 
     const before = await measure()
     await page.evaluate(() => {
-      document.querySelector('[data-home-mascot]')?.remove()
+      document.querySelector('[data-mascot]')?.remove()
     })
     const after = await measure()
 
@@ -404,7 +404,7 @@ test.describe('home artwork failure', () => {
 
     // The failed mascot is removed instead of showing a broken-image indicator.
     await expect(page.locator('[data-mascot-image]')).toHaveCount(0)
-    await expect(page.locator('[data-home-mascot]')).toHaveCount(1)
+    await expect(page.locator('[data-mascot]')).toHaveCount(1)
 
     // The failed seasonal card shows the standard neutral placeholder, at the same size
     // as its siblings.

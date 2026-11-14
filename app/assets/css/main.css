@@ -1040,10 +1040,10 @@ a {
   }
 }
 
-/* Feature 013 — the Matchi mascot on the home page. It floats over the page at the
-   bottom inline-end corner of the viewport: it reserves no layout space, adds no
-   document overflow, never moves with the scroll, never animates, and never
-   intercepts a pointer, so a card beneath it stays clickable.
+/* Feature 013/014 — the Matchi mascot, shared unchanged by the home screen and the five game
+   screens. It floats over the page at the bottom inline-end corner of the viewport: it reserves
+   no layout space, adds no document overflow, never moves with the scroll, never animates, and
+   never intercepts a pointer, so a card or a board tile beneath it stays clickable.
 
    The inline size comes from one token, `--mascot-size`, set per viewport band. Band 1
    (320px–1023px) has no free margin beside the 56rem catalog, so the token is capped by the
@@ -1051,8 +1051,10 @@ a {
    no intersection with any card name, summary or state text, and 18 fails at 768x1024. Band 2
    (1024px and wider) has a free margin of at least 64px beside the centered catalog, so the
    token is capped by that margin and the mascot stands beside the catalog instead of over it.
+   Both bands are expressed in viewport units only, so the mascot's box is identical on every
+   screen at the same viewport width — the game screens get no second size rule.
    The box is sized in CSS, so the mascot cannot shift the layout when the file arrives. */
-.home-mascot {
+.mascot {
   position: fixed;
   inset-block-end: 0;
   inset-inline-end: 0;
@@ -1063,7 +1065,7 @@ a {
   aspect-ratio: var(--mascot-ratio);
 }
 
-.home-mascot__img {
+.mascot__img {
   display: block;
   inline-size: 100%;
   block-size: 100%;
@@ -1071,7 +1073,7 @@ a {
 }
 
 @media (min-width: 1024px) {
-  .home-mascot {
+  .mascot {
     /* The owner asked on 2026-11-13 for the mascot to fill 80 % of the free column to
        the right of the centered catalog. The column is (100vw - 55rem) / 2 wide, so the
        token is 80 % of it. The 53dvh term is a ceiling that stops the mascot from taking
